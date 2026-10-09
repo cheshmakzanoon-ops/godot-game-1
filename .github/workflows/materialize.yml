@@ -39,6 +39,11 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # This workflow's GitHub App token cannot modify workflow files.
+          # Restore the bootstrap workflow and publish CI separately with the GitHub connector.
+          rm -f .github/workflows/ci.yml
+          git restore .github/workflows/materialize.yml
+          find tests -type d -name __pycache__ -prune -exec rm -rf {} +
           git add -A
           if ! git diff --cached --quiet; then
             git commit -m "Add full NEEDLEBEAT DROP Godot 4 source and generated art/audio [skip ci]"

@@ -31,7 +31,7 @@ static func create_stage(song_seed: int, index: int, campaign_index: int, bpm: i
 	var start_angle := rng.randf_range(0.0, TAU)
 	var preloads: Array = []
 	for i in PRELOADS[index]:
-		var lane := 0 if special != "TWIN" else i % 2
+		var lane: int = 0 if special != "TWIN" else int(i) % 2
 		var proposal := rng.randf_range(0.0, TAU)
 		for attempts in 64:
 			if NBGeometry.clearance(proposal, preloads, lane) > deg_to_rad(32.0):

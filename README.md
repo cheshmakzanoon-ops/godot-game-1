@@ -4,7 +4,7 @@
 
 This is an actual Godot 4 portrait project implementing the core game described in `design/ORIGINAL_GDD.md`. It includes gameplay source, 50 original synthesized sound effects/instruments, a deterministic four-bar music sequencer, saves, song codes, a daily challenge, tests, Android export preset, and a GitHub Actions workflow.
 
-**Current verification:** Host-side automated checks pass. **Godot engine startup, touch/audio gameplay, and Android APK export have not been executed in this workspace**, because there is no installed Godot binary or reachable external SDK downloads. This is a playable *source candidate* intended to be opened and tested, not a signed Play Store release or a verified APK.
+**Current verification:** The project has been imported and checked with the **real Godot 4.7.2 engine** in Linux headless mode. After correcting GDScript parser and export preset issues, **15/15 engine smoke checks passed** on October 9, 2026. The Python host suite also passes. Android APK export and device touch/audio validation are still outstanding in this network-isolated environment. See `docs/DEVELOPMENT_HANDOFF.md` and `tools/bootstrap_android_linux.sh`.
 
 ## Open and play
 
@@ -31,7 +31,7 @@ Desktop mouse click and Android single-finger taps have the same semantics. The 
 
 ## Current limitations (not production-ready)
 
-- **Not yet runtime-tested in Godot or verified on a physical Android device.** Engine-based smoke tests are included and configured for CI, but not executed here.
+- **Engine-tested (15/15), but not yet verified on a physical Android device.** Run the existing headless smoke suite after each source change.
 - `EXPORT AUDIO (.WAV)` creates a valid RIFF/PCM file under `user://exports/`; desktop users can retrieve it from the Godot user-data folder. The **Android secure WAV share chooser/FileProvider bridge is not yet implemented**. Song codes can be shared with the Android chooser or clipboard.
 - No signed release AAB, full native Android Gradle share plugin, global leaderboard, performance/thermal playtest suite, screen reader support, or final Play Store QA.
 - REWIND physically eases at reversal boundaries, but custom pixel-precise rendering and audio/device latency still require Android validation.
@@ -84,7 +84,7 @@ First-party authored `.gd`/`.py` source is counted by `tests/test_project.py`; i
 
 ## Android APK build
 
-Refer to `BUILD_ANDROID.md`. For local device installs, use the Android **debug** preset. The included GitHub Actions workflow is a starting point for automated Android ARM64 debug builds and uploads APK artifacts; it has **not yet been run**. For Google Play submission, Gradle build template, AAB export, release signing, privacy declarations and on-device validation remain mandatory.
+Refer to `BUILD_ANDROID.md`. For local device installs, use the Android **debug** preset. The included GitHub Actions workflow is a starting point for automated Android ARM64 debug builds and uploads APK artifacts; it has **build status must be checked in GitHub Actions**. For Google Play submission, Gradle build template, AAB export, release signing, privacy declarations and on-device validation remain mandatory.
 
 ## License and content
 

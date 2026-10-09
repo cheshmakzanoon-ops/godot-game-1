@@ -46,13 +46,13 @@ static func decode(code: String) -> Dictionary:
 	if int(data.get("g", -1)) not in range(5) or int(data.get("b", 0)) < 50 or int(data.get("b", 0)) > 220:
 		return {}
 	for event in data["e"]:
-			if typeof(event) != TYPE_DICTIONARY:
-				return {}
-			if not event.has("step") or not event.has("layer") or not event.has("order"):
-				return {}
-			if int(event["step"]) not in range(16) or int(event["layer"]) not in range(4):
-				return {}
-			if int(event["order"]) < 0 or int(event["order"]) > 50:
-				return {}
+		if typeof(event) != TYPE_DICTIONARY:
+			return {}
+		if not event.has("step") or not event.has("layer") or not event.has("order"):
+			return {}
+		if int(event["step"]) not in range(16) or int(event["layer"]) not in range(4):
+			return {}
+		if int(event["order"]) < 0 or int(event["order"]) > 50:
+			return {}
 	return {"genre": int(data["g"]), "bpm": int(data["b"]), "seed": int(data["s"]),
-			"events": data["e"].duplicate(true)}
+		"events": data["e"].duplicate(true)}

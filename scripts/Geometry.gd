@@ -12,7 +12,7 @@ static func wrap(angle: float) -> float:
 	return fposmod(angle, TAU)
 
 static func angular_distance(a: float, b: float) -> float:
-	var delta := absf(wrap(a) - wrap(b))
+	var delta := absf(NBGeometry.wrap(a) - NBGeometry.wrap(b))
 	return minf(delta, TAU - delta)
 
 static func clearance(local_angle: float, pins: Array, lane: int) -> float:
@@ -35,4 +35,4 @@ static func evaluate(local_angle: float, pins: Array, lane: int) -> Dictionary:
 	}
 
 static func impact_local_angle(fire_time: float, motion: NBDiscMotion) -> float:
-	return wrap(FIRE_ANGLE - motion.phase_at(fire_time + FLIGHT))
+	return NBGeometry.wrap(FIRE_ANGLE - motion.phase_at(fire_time + FLIGHT))

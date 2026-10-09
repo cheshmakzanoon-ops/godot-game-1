@@ -70,7 +70,7 @@ func _spawn(voice: String, semitones: int, gain: float) -> void:
 func _on_step(abs_step: int) -> void:
 	var bar := int(abs_step / STEPS) % BARS
 	var step := abs_step % STEPS
-	var root := ROOT_MIDI[genre] + CHORD_ROOTS[bar]
+	var root: int = int(ROOT_MIDI[genre]) + int(CHORD_ROOTS[bar])
 	# Anchoring groove is intentionally modest; shot-authored events dominate.
 	if step == 0 or step == 8:
 		_spawn("kick", 0, 0.24)

@@ -67,6 +67,10 @@ jobs:
         run: |
           mkdir -p build
           godot --headless --path . --export-debug Android build/NEEDLEBEAT_DROP-debug.apk
+      - name: Verify Android debug APK signature and package
+        run: |
+          "$ANDROID_HOME/build-tools/35.0.1/apksigner" verify --verbose --print-certs build/NEEDLEBEAT_DROP-debug.apk
+          "$ANDROID_HOME/build-tools/35.0.1/aapt" dump badging build/NEEDLEBEAT_DROP-debug.apk | head -12
       - uses: actions/upload-artifact@v4
         with:
           name: NEEDLEBEAT_DROP_Android_ARM64_Debug

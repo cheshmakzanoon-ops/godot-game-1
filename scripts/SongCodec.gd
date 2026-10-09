@@ -54,5 +54,5 @@ static func decode(code: String) -> Dictionary:
 				return {}
 			if int(event["order"]) < 0 or int(event["order"]) > 50:
 				return {}
-		return {"genre": int(data["g"]), "bpm": int(data["b"]), "seed": int(data["s"]),
+	return {"genre": int(data["g"]), "bpm": int(data["b"]), "seed": int(data["s"]),
 			"events": data["e"].duplicate(true)}

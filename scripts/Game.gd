@@ -563,15 +563,15 @@ func _record_art(palette: Array, phase: float, ring_pins: Array, special: String
 		draw_arc(CENTER, MAIN_RADIUS + 37.0 + pulse, -PI * .32, PI * 1.40, 80,
 			Color(accent.r, accent.g, accent.b, .42), 2, true)
 
-func _draw_pin(world_angle: float, lane: int, preload: bool, palette: Array) -> void:
+func _draw_pin(world_angle: float, lane: int, is_preloaded: bool, palette: Array) -> void:
 	var radius := INNER_RADIUS if lane == 1 else MAIN_RADIUS
 	var ray := Vector2(cos(world_angle), sin(world_angle))
 	var side := Vector2(-ray.y, ray.x)
 	var head := CENTER + ray * radius
 	var stem_start := CENTER + ray * (radius + 2.0)
 	var stem_end := CENTER + ray * (radius + 44.0)
-	var shaft_color: Color = palette[1].darkened(.36) if preload else palette[1]
-	var head_color: Color = palette[4] if preload else palette[2]
+	var shaft_color: Color = palette[1].darkened(.36) if is_preloaded else palette[1]
+	var head_color: Color = palette[4] if is_preloaded else palette[2]
 	var head_radius := radius * sin(deg_to_rad(NBGeometry.HIT_DEG * .5))
 	draw_line(stem_start + side * 1.5, stem_end + side * 1.5, Color(0, 0, 0, .44), 8.5, true)
 	draw_line(stem_start, stem_end, shaft_color, 6, true)

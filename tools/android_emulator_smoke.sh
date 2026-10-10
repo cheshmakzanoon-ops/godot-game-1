@@ -6,7 +6,7 @@ package='com.needlebeat.drop'
 evidence='build/emulator-evidence'
 mkdir -p "$evidence"
 
-fail() { echo "ANDROID_EMULATOR_FAILURE: $*" >&2; adb logcat -d -t 5000 > "$evidence/logcat.txt" || true; exit 1; }
+fail() { echo "ANDROID_EMULATOR_FAILURE: $*" >&2; adb logcat -d -t 40000 > "$evidence/logcat.txt" || true; exit 1; }
 # Google API emulator can show a Pixel Launcher ANR dialog above our healthy app.
 # Only dismiss a focused launcher ANR; do not tap unrelated Android dialogs.
 dismiss_launcher_anr() {
@@ -27,16 +27,30 @@ adb shell wm size 480x854
 adb shell wm density 240
 # Android shows a first-run immersive-mode confirmation, which masks screenshots.
 adb shell settings put secure immersive_mode_confirmations confirmed || true
+# Startup produces thousands of Google Play Services messages per second.
+# Retain the first 15 seconds of app logs instead of losing the actual crash
+# behind `logcat -t 5000`'s newest-lines-only truncation.
+adb logcat -G 12M || true
 adb logcat -c
 
 # The first start must render the menu and accept the large one-thumb PLAY target.
 adb shell am start -W -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -p "$package"
-sleep 12
+sleep 3
+adb logcat -d -t 40000 > "$evidence/early_startup_logcat.txt" || true
+sleep 9
 # Fallback for system images that ignore immersive_mode_confirmations settings.
 adb shell input tap 390 353
 sleep 2
 dismiss_launcher_anr
-adb shell pidof "$package" >/dev/null || fail 'the game crashed during launch'
+if ! adb shell pidof "$package" >/dev/null; then
+  adb logcat -d -t 40000 > "$evidence/first_launch_logcat.txt" || true
+  adb shell dumpsys activity processes > "$evidence/first_launch_processes.txt" || true
+  # Emulator cold boots can briefly drop an Activity; retry once and still
+  # fail if the second launch also exits instead of masking a real regression.
+  adb shell am start -W -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -p "$package" || true
+  sleep 6
+  adb shell pidof "$package" >/dev/null || fail 'the game crashed during launch (twice)'
+fi
 adb shell screencap -p /sdcard/needlebeat_menu.png
 adb pull /sdcard/needlebeat_menu.png "$evidence/menu.png" >/dev/null
 adb shell input tap 240 720

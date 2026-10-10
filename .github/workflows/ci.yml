@@ -27,6 +27,9 @@ jobs:
         run: godot --headless --path . --script res://tests/checkpoint_flow.gd
       - name: Android audio-focus interruption and lifecycle regressions
         run: godot --headless --path . --script res://tests/audio_focus_flow.gd
+      - name: Ten-minute deterministic audio/memory/CPU soak
+        timeout-minutes: 3
+        run: godot --headless --path . --script res://tests/audio_soak.gd
 
   android-debug:
     needs: game-test

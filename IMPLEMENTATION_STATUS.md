@@ -72,3 +72,7 @@ headphone unplug/Bluetooth switching and latency require device validation.
 Android emulator observation: Godot 4.7.2's JavaClassWrapper rejected nested
 `AudioAttributes$Builder.Builder()` at runtime. Replaced with the supported
 AudioManager listener/stream overload; runtime CI is the acceptance gate.
+
+### Sustained Android audio and frame-pacing verification
+
+The new 600-second deterministic PCM/memory/CPU soak runs in the Godot headless CI job, alongside a debug-only Android emulator performance exercise of active four-layer audio for 40 real seconds. `docs/PERFORMANCE_SOAK.md` contains test budgets, markers and residual real-device acceptance criteria. Shipping ARM64 exports remain unchanged. The emulator measures native `AudioStreamGeneratorPlayback.get_skips()` underrun occurrences, frame pacing, mixer clock progression and engine-allocator growth, without claiming device thermal or acoustic latency validity.

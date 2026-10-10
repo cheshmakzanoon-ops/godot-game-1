@@ -8,6 +8,7 @@ const EXTRA := "needlebeat.qa"
 const COMMAND := "wav_share"
 const CHECKPOINT_COMMAND := "checkpoint_seed"
 const FOCUS_COMMAND := "audio_focus"
+const PERF_COMMAND := "performance_soak"
 const PROBE_WAV := "user://exports/needlebeat_qa_smoke.wav"
 
 func _ready() -> void:
@@ -31,6 +32,8 @@ func _ready() -> void:
 		call_deferred("_seed_recovery_checkpoint")
 	elif instruction == FOCUS_COMMAND:
 		call_deferred("_test_audio_focus")
+	elif instruction == PERF_COMMAND:
+		call_deferred("_start_performance_soak")
 
 func _test_wav_share() -> void:
 	var parent = get_parent()
@@ -130,3 +133,8 @@ func _test_audio_focus() -> void:
 		printerr("NEEDLEBEAT_QA_FOCUS_RESUME_FAILED")
 		return
 	print("NEEDLEBEAT_QA_FOCUS_RESUMED")
+
+func _start_performance_soak() -> void:
+	# Created only after the debug intent is verified; normal users never run it.
+	var probe = load("res://tests/android_soak.gd").new()
+	get_parent().add_child(probe)

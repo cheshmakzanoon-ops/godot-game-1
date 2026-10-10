@@ -105,3 +105,7 @@ overload. Godot 4.7.2's `JavaClassWrapper` does not expose a callable
 `AudioAttributes$Builder.Builder()` constructor on our Android 15 emulator.
 A future migration to `AudioFocusRequest.Builder` needs a native wrapper or
 verified Godot JNI constructor support first; do not break startup to force it.
+
+## Performance endurance validation
+
+The GitHub `game-test` job renders ten simulated minutes of continuous, high-density music without an actual 10-minute delay. The Android emulator job additionally executes a 40-second live audio/render soak via the debug-only `needlebeat.qa=performance_soak` intent. Review its `NEEDLEBEAT_DROP_Emulator_Evidence` artifact for `perf_soak_logcat.txt`, `soak_meminfo.txt`, `soak_gfxinfo.txt` and `soak.png`. These are diagnostic emulator thresholds; see `docs/PERFORMANCE_SOAK.md`. Real-phone thermal and battery validation is not yet complete.

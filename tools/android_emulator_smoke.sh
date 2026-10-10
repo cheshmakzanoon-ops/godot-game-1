@@ -158,7 +158,29 @@ grep -q 'NEEDLEBEAT_QA_SESSION_RESTORED stage=0 placed=1' "$evidence/checkpoint_
 adb shell screencap -p /sdcard/needlebeat_recovered.png
 adb pull /sdcard/needlebeat_recovered.png "$evidence/recovered.png" >/dev/null
 
+# Exercise sustained Android rendering and native audio streaming independently
+# of test-mode WAV export. The app reports measured frame pacing, audio clock
+# progression, generator skips and engine-allocator growth; fail on a regression.
+adb shell am force-stop "$package"
+adb logcat -c
+adb shell am start -W -a android.intent.action.MAIN -c android.intent.category.LAUNCHER \
+    -p "$package" --es needlebeat.qa performance_soak
+for attempt in $(seq 1 75); do
+  adb logcat -d -t 20000 > "$evidence/perf_soak_logcat.txt" || true
+  if grep -q 'NEEDLEBEAT_QA_PERF_PASS' "$evidence/perf_soak_logcat.txt"; then break; fi
+  if grep -Eq 'NEEDLEBEAT_QA_PERF_FAIL|FATAL EXCEPTION|SCRIPT ERROR' "$evidence/perf_soak_logcat.txt"; then
+    fail 'Android sustained performance probe reported a failure'
+  fi
+  sleep 1
+done
+grep -q 'NEEDLEBEAT_QA_PERF_PASS' "$evidence/perf_soak_logcat.txt" || fail 'Performance probe timed out'
+grep -q 'NEEDLEBEAT_QA_PERF_METRICS' "$evidence/perf_soak_logcat.txt" || fail 'Performance metrics were not reported'
+adb shell dumpsys meminfo "$package" > "$evidence/soak_meminfo.txt" || true
+adb shell dumpsys gfxinfo "$package" framestats > "$evidence/soak_gfxinfo.txt" || true
+adb shell screencap -p /sdcard/needlebeat_soak.png
+adb pull /sdcard/needlebeat_soak.png "$evidence/soak.png" >/dev/null
+
 if [ "$touch_failure" -ne 0 ] || [ "$visual_failure" -ne 0 ]; then
   fail 'Android screen or touch regression; see emulator evidence'
 fi
-echo 'ANDROID_EMULATOR_PASS: launch, touch, PCM WAV, native sharesheet, synthetic audio focus, process-death recovery'
+echo 'ANDROID_EMULATOR_PASS: launch, touch, WAV share, focus, recovery, sustained performance'

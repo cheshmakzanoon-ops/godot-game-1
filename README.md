@@ -134,3 +134,7 @@ returns to normal. Pausing or leaving a record releases audio focus for other
 apps. This is tested with a synthetic Android callback and headless Godot
 checks; see `docs/AUDIO_FOCUS.md`. A real phone-call and Bluetooth test is still
 required on physical hardware.
+
+## Sustained audio and Android performance testing
+
+The repository now includes a ten-minute deterministic PCM/memory/CPU soak (`tests/audio_soak.gd`) and a separate debug-only 40-second Android emulator performance probe. CI records audio transport progress, generator-buffer underruns, renderer frame intervals, memory and `dumpsys` diagnostics, and fails on meaningful regressions. See [`docs/PERFORMANCE_SOAK.md`](docs/PERFORMANCE_SOAK.md) for exact thresholds, commands, and real-device limitations.

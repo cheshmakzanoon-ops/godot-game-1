@@ -42,7 +42,7 @@ This Android export now requires a **Gradle build** so it can compile a tiny Jav
 ```bash
 mkdir -p android/build
 unzip -q "$HOME/.local/share/godot/export_templates/4.7.2.stable/android_source.zip" -d android/build
-printf '4.7.2.stable\\n' > android/.build_version
+echo '4.7.2.stable' > android/.build_version
 touch android/build/.gdignore
 chmod +x android/build/gradlew
 python tools/prepare_android_share.py

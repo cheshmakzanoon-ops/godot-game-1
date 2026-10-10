@@ -72,3 +72,7 @@ Emulator screenshots, logs and window state are uploaded as a separate
 `NEEDLEBEAT_DROP_Emulator_Evidence` artifact. The instrumentation is disabled
 in release builds and inactive for ordinary user launches. This is **not** a
 substitute for physical-device speaker/Bluetooth latency and tap tests.
+
+### Software emulator graphics compatibility
+
+An Android 15 emulator previously produced solid-gray captures while gameplay and secure WAV sharing executed successfully. The diagnostic Android log showed `CanvasShaderGLES3`/`SceneShaderGLES3` failing to link because the old `swiftshader_indirect` GPU implementation exceeded `GL_MAX_FRAGMENT_UNIFORM_VECTORS (261)`. The emulator CI configuration now uses the Android-supported `-gpu swangle` renderer (ANGLE over SwiftShader) to isolate this GPU-driver limitation while retaining the game's Godot Compatibility renderer and all visual assertions. If an emulator still fails, inspect `NEEDLEBEAT_DROP_Emulator_Evidence` instead of treating headless screenshots as real-phone rendering proof. Physical Android hardware verification remains required.

@@ -93,6 +93,11 @@ fi
 if grep -Eiq 'FATAL EXCEPTION|AndroidRuntime.*FATAL|NEEDLEBEAT_QA_SHARE_FAILED' "$evidence/logcat.txt"; then
   fail 'Uncaught Android error detected'
 fi
+# A software GPU that cannot link Godot's GLES3 shaders can produce an all-gray
+# screen even though input and WAV-sharing code are running correctly.
+if grep -Fq 'Fragment shader active uniforms exceed GL_MAX_FRAGMENT_UNIFORM_VECTORS' "$evidence/after_tap_logcat.txt" "$evidence/logcat.txt"; then
+  fail 'Android GLES3 canvas shader exceeded emulator GPU uniform limit'
+fi
 if [ "$touch_failure" -ne 0 ] || [ "$visual_failure" -ne 0 ]; then
   fail 'Android screen or touch regression; see emulator evidence'
 fi

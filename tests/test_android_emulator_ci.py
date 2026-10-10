@@ -12,6 +12,8 @@ class AndroidEmulatorCITests(unittest.TestCase):
         self.assertIn('needs: android-debug', ci)
         self.assertIn('reactivecircus/android-emulator-runner@v2', ci)
         self.assertIn('api-level: 35', ci)
+        self.assertIn('-gpu swangle', ci)
+        self.assertNotIn('-gpu swiftshader_indirect', ci)
         self.assertIn('bash tools/android_emulator_smoke.sh', ci)
 
     def test_qa_cannot_trigger_for_release_or_ordinary_launch(self):

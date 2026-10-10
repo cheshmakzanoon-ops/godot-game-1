@@ -114,7 +114,9 @@ jobs:
           cores: 4
           ram-size: 3072M
           disable-animations: true
-          emulator-options: -no-snapshot -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          # Use ANGLE over SwiftShader Vulkan. Legacy swiftshader_indirect fails to link
+          # Godot 4.7's GLES3 canvas shader on this headless runner (261 uniforms).
+          emulator-options: -no-snapshot -no-window -gpu swangle -noaudio -no-boot-anim -camera-back none
           script: bash tools/android_emulator_smoke.sh
       - name: Upload emulator diagnostics
         if: always()

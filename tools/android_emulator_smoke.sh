@@ -7,6 +7,19 @@ evidence='build/emulator-evidence'
 mkdir -p "$evidence"
 
 fail() { echo "ANDROID_EMULATOR_FAILURE: $*" >&2; adb logcat -d -t 5000 > "$evidence/logcat.txt" || true; exit 1; }
+# The Google API emulator may display a Pixel Launcher ANR dialog over our app.
+# Dismiss only the launcher ANR and leave other system dialogs untouched.
+dismiss_launcher_anr() {
+  for attempt in 1 2 3; do
+    if adb shell dumpsys window | grep -Eq 'mCurrentFocus=.*Application Not Responding.*nexuslauncher'; then
+      echo "Pixel Launcher ANR dismissed (attempt $attempt)" | tee -a "$evidence/system_dialogs.txt"
+      adb shell input tap 300 418
+      sleep 3
+    else
+      break
+    fi
+  done
+}
 adb wait-for-device
 adb shell getprop sys.boot_completed | tr -d '\r' | grep -qx '1' || fail 'emulator did not boot'
 adb install -r "$apk" || fail 'failed to install x86_64 debug APK'
@@ -22,6 +35,7 @@ sleep 12
 # Fallback for system images that ignore immersive_mode_confirmations settings.
 adb shell input tap 390 353
 sleep 2
+dismiss_launcher_anr
 adb shell pidof "$package" >/dev/null || fail 'the game crashed during launch'
 adb shell screencap -p /sdcard/needlebeat_menu.png
 adb pull /sdcard/needlebeat_menu.png "$evidence/menu.png" >/dev/null
@@ -29,6 +43,12 @@ adb shell input tap 240 720
 sleep 5
 adb shell pidof "$package" >/dev/null || fail 'the game crashed after a touch event'
 adb logcat -d -t 5000 > "$evidence/after_tap_logcat.txt"
+if ! grep -q 'NEEDLEBEAT_QA_PLAY_STARTED' "$evidence/after_tap_logcat.txt"; then
+  dismiss_launcher_anr
+  adb shell input tap 240 720
+  sleep 5
+  adb logcat -d -t 5000 > "$evidence/after_tap_logcat.txt"
+fi
 touch_failure=0
 if ! grep -q 'NEEDLEBEAT_QA_PLAY_STARTED' "$evidence/after_tap_logcat.txt"; then
   touch_failure=1
@@ -62,6 +82,7 @@ grep -q 'NEEDLEBEAT_QA_SHARE_REQUESTED' "$evidence/logcat.txt" || fail 'FileProv
 
 # Android can display either the native sharesheet or a resolver depending on image/apps.
 adb shell dumpsys activity activities > "$evidence/activities.txt"
+dismiss_launcher_anr
 adb shell uiautomator dump /sdcard/needlebeat_window.xml >/dev/null 2>&1 || true
 adb shell cat /sdcard/needlebeat_window.xml > "$evidence/window.xml" 2>/dev/null || true
 adb shell screencap -p /sdcard/needlebeat_share.png

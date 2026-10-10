@@ -40,7 +40,11 @@ This Android export now requires a **Gradle build** so it can compile a tiny Jav
 `FileProvider` bridge. After installing the Android SDK and Godot export templates:
 
 ```bash
-godot --headless --editor --path . --install-android-build-template --quit
+mkdir -p android/build
+unzip -q "$HOME/.local/share/godot/export_templates/4.7.2.stable/android_source.zip" -d android/build
+printf '4.7.2.stable\\n' > android/.build_version
+touch android/build/.gdignore
+chmod +x android/build/gradlew
 python tools/prepare_android_share.py
 godot --headless --path . --export-debug Android build/NEEDLEBEAT_DROP-debug.apk
 ```
@@ -56,3 +60,5 @@ There is no microphone, external-storage or broad file permission.
 a mail/chat/file app, verify the recipient can play the stereo four-bar WAV,
 and retry with no matching share app. Test background/resume and Android 10+.
 Those on-device checks have not yet been performed.
+
+Note: `--install-android-build-template --quit` does not install the template by itself; CI explicitly extracts the matched Godot 4.7.2 source template.

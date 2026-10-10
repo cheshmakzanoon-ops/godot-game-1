@@ -126,7 +126,8 @@ restores it. See `docs/SESSION_RECOVERY.md`.
 ## Android audio interruption and manual resume
 
 Android calls, other music apps and system audio-focus interruptions now have
-an explicit `AudioManager` bridge (`scripts/AndroidAudioFocus.gd`). All audio
+an explicit `AudioManager` bridge (`scripts/AndroidAudioFocus.gd`) using the
+API-compatible listener/stream focus request. All audio
 focus losses suspend the song and persist unfinished records; focus gain never
 starts playing behind an interruption screen. Tap **RESUME** after the phone
 returns to normal. Pausing or leaving a record releases audio focus for other

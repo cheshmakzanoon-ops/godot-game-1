@@ -68,3 +68,7 @@ permanent focus-loss pause, checkpointed game state, no auto-resume, explicit
 reacquisition, and release of focus on pause/exit. Host+Godot regression suite
 and a debug-only Android emulator focus probe are in CI. Real phone calls,
 headphone unplug/Bluetooth switching and latency require device validation.
+
+Android emulator observation: Godot 4.7.2's JavaClassWrapper rejected nested
+`AudioAttributes$Builder.Builder()` at runtime. Replaced with the supported
+AudioManager listener/stream overload; runtime CI is the acceptance gate.

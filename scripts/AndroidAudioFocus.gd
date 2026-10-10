@@ -14,7 +14,6 @@ const FOCUS_LOSS_CAN_DUCK := -3
 
 var manager: Variant = null
 var listener: Variant = null
-var focus_request: Variant = null
 var requested := false
 var acquired := false
 var supported := false
@@ -37,15 +36,10 @@ func _ready() -> void:
 	if listener == null or JavaClassWrapper.get_exception() != null:
 		listener = null
 		return
-	var version = JavaClassWrapper.wrap("android.os.Build$VERSION")
-	if int(version.SDK_INT) >= 26:
-		var attributes_builder = JavaClassWrapper.wrap("android.media.AudioAttributes$Builder").Builder()
-		var attributes = attributes_builder.setUsage(14).setContentType(2).build()
-		var request_builder = JavaClassWrapper.wrap("android.media.AudioFocusRequest$Builder").Builder(FOCUS_GAIN)
-		focus_request = request_builder.setAudioAttributes(attributes).setOnAudioFocusChangeListener(listener).setWillPauseWhenDucked(true).build()
-		if JavaClassWrapper.get_exception() != null or focus_request == null:
-			focus_request = null
-			return
+	# requestAudioFocus(OnAudioFocusChangeListener, STREAM_MUSIC, GAIN) is
+	# available on every supported Android API level. Godot 4.7's JNI wrapper
+	# cannot instantiate AudioAttributes$Builder on all builds (its nested
+	# constructor is not exposed as "Builder"), so do not fail app startup.
 	supported = true
 
 func request_focus() -> bool:
@@ -58,10 +52,7 @@ func request_focus() -> bool:
 	if acquired:
 		return true
 	var result: int = 0
-	if focus_request != null:
-		result = int(manager.requestAudioFocus(focus_request))
-	else:
-		result = int(manager.requestAudioFocus(listener, 3, FOCUS_GAIN))
+	result = int(manager.requestAudioFocus(listener, 3, FOCUS_GAIN))
 	if JavaClassWrapper.get_exception() != null:
 		result = 0
 	requested = result == FOCUS_GAIN
@@ -76,10 +67,7 @@ func abandon_focus() -> void:
 	acquired = false
 	if not had_request or not supported:
 		return
-	if focus_request != null:
-		manager.abandonAudioFocusRequest(focus_request)
-	else:
-		manager.abandonAudioFocus(listener)
+	manager.abandonAudioFocus(listener)
 
 func _on_focus_callback(change: int) -> void:
 	# Android invokes this on a platform thread. Schedule the state transition

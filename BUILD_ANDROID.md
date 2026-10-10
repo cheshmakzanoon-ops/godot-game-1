@@ -98,3 +98,10 @@ verifies the PCM clock stays still through transient loss, and checks that an
 explicit player resume reacquires focus. It uses Android 15 with the ANGLE
 `swangle` GPU backend. See `docs/AUDIO_FOCUS.md`. Actual cellular call and
 Bluetooth route-change scenarios must still be verified on hardware.
+
+The bridge intentionally uses Android's compatible
+`requestAudioFocus(OnAudioFocusChangeListener, STREAM_MUSIC, AUDIOFOCUS_GAIN)`
+overload. Godot 4.7.2's `JavaClassWrapper` does not expose a callable
+`AudioAttributes$Builder.Builder()` constructor on our Android 15 emulator.
+A future migration to `AudioFocusRequest.Builder` needs a native wrapper or
+verified Godot JNI constructor support first; do not break startup to force it.

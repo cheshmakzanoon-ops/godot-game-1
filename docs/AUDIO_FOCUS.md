@@ -5,10 +5,14 @@ process-death recovery features. The release remains an offline Godot 4.7.2 game
 
 ## Runtime behavior
 
-- The music generator requests transiently owned Android **music/game audio focus**
-  when it starts or a player explicitly resumes. Android API 26+ uses
-  `AudioFocusRequest.Builder` and `AudioAttributes` (`USAGE_GAME`,
-  `CONTENT_TYPE_MUSIC`); Android 24–25 uses the legacy compatible overload.
+- The music generator requests Android **music-stream audio focus** when
+  playback starts or the player explicitly resumes. It uses the
+  `AudioManager.requestAudioFocus(listener, STREAM_MUSIC, AUDIOFOCUS_GAIN)`
+  overload supported across our Android API 24+ target. Android recommends
+  `AudioFocusRequest.Builder` for API 26+, but that inner-class constructor
+  is not exposed by `JavaClassWrapper` in the current Godot 4.7.2 Android
+  runtime. This bridge uses the supported older overload without a custom
+  Android plugin or Gradle export to avoid aborting the game at startup.
 - `AudioManager.OnAudioFocusChangeListener` is implemented in GDScript using
   Godot 4.7.2's `JavaClassWrapper.create_sam_callback`. Its callback forwards
   to the game thread using `call_deferred`.

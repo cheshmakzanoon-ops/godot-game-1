@@ -10,9 +10,9 @@ class AudioFocusContract(unittest.TestCase):
         source = (ROOT / 'scripts/AndroidAudioFocus.gd').read_text()
         self.assertIn('create_sam_callback(', source)
         self.assertIn('AudioManager$OnAudioFocusChangeListener', source)
-        self.assertIn('AudioFocusRequest$Builder', source)
-        self.assertIn('abandonAudioFocusRequest', source)
-        self.assertIn('setWillPauseWhenDucked(true)', source)
+        self.assertIn('requestAudioFocus(listener, 3, FOCUS_GAIN)', source)
+        self.assertIn('abandonAudioFocus(listener)', source)
+        self.assertNotIn('AudioAttributes$Builder").Builder()', source)
         self.assertIn('call_deferred("_apply_focus_change", change)', source)
 
     def test_focus_loss_does_not_autoresume_or_lose_checkpoint(self):

@@ -24,12 +24,16 @@ class AndroidEmulatorCITests(unittest.TestCase):
         self.assertIn('intent.getStringExtra(EXTRA)', probe)
         self.assertIn('NBAndroidShare.share_wav(PROBE_WAV)', probe)
         self.assertIn('NEEDLEBEAT_QA_SHARE_REQUESTED', probe)
+        self.assertIn('checkpoint_seed', probe)
+        self.assertIn('NEEDLEBEAT_QA_CHECKPOINT_SAVED', probe)
 
     def test_emulator_requires_real_chooser_and_export(self):
         script = (ROOT / 'tools/android_emulator_smoke.sh').read_text()
         for phrase in ('adb install -r', 'adb shell input tap', 'NEEDLEBEAT_QA_EXPORT_OK',
                        'NEEDLEBEAT_QA_SHARE_REQUESTED', 'intentresolver', 'FATAL EXCEPTION'):
             self.assertIn(phrase, script)
+        self.assertIn('NEEDLEBEAT_QA_SESSION_RESTORED stage=0 placed=1', script)
+        self.assertIn('adb shell am force-stop', script)
 
 if __name__ == '__main__':
     unittest.main()

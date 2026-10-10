@@ -23,6 +23,8 @@ jobs:
         run: godot --headless --path . --script res://tests/smoke.gd
       - name: Deterministic four-record / music regression tests
         run: godot --headless --path . --script res://tests/full_flow.gd
+      - name: Android process-death checkpoints and sample-accurate audio
+        run: godot --headless --path . --script res://tests/checkpoint_flow.gd
 
   android-debug:
     needs: game-test
@@ -114,8 +116,6 @@ jobs:
           cores: 4
           ram-size: 3072M
           disable-animations: true
-          # Use ANGLE over SwiftShader Vulkan. Legacy swiftshader_indirect fails to link
-          # Godot 4.7's GLES3 canvas shader on this headless runner (261 uniforms).
           emulator-options: -no-snapshot -no-window -gpu swangle -noaudio -no-boot-anim -camera-back none
           script: bash tools/android_emulator_smoke.sh
       - name: Upload emulator diagnostics

@@ -63,6 +63,18 @@ func reset() -> void:
 	step_cursor = 0
 	active.clear()
 
+# Reconstruct transport phase after an Android process restart without replaying
+# an entire long attempt. Re-simulate one second of sample tails to keep notes
+# already in flight, and use the existing absolute step scheduler thereafter.
+func seek_frame(target: int) -> void:
+	var destination := maxi(0, target)
+	var first := maxi(0, destination - RATE)
+	frame = first
+	step_cursor = maxi(0, ceili(float(first) / frames_per_step))
+	active.clear()
+	if destination > first:
+		mix(destination - first)
+
 func set_events(next_events: Array) -> void:
 	events = next_events.duplicate(true)
 

@@ -7,13 +7,13 @@ evidence='build/emulator-evidence'
 mkdir -p "$evidence"
 
 fail() { echo "ANDROID_EMULATOR_FAILURE: $*" >&2; adb logcat -d -t 5000 > "$evidence/logcat.txt" || true; exit 1; }
-# The Google API emulator may display a Pixel Launcher ANR dialog over our app.
-# Dismiss only the launcher ANR and leave other system dialogs untouched.
+# Google API emulator can show a Pixel Launcher ANR dialog above our healthy app.
+# Only dismiss a focused launcher ANR; do not tap unrelated Android dialogs.
 dismiss_launcher_anr() {
   for attempt in 1 2 3; do
     if adb shell dumpsys window | grep -Eq 'mCurrentFocus=.*Application Not Responding.*nexuslauncher'; then
       echo "Pixel Launcher ANR dismissed (attempt $attempt)" | tee -a "$evidence/system_dialogs.txt"
-      adb shell input tap 300 418
+      adb shell input tap 300 418  # "Close app" in the emulator's ANR dialog
       sleep 3
     else
       break
@@ -93,12 +93,40 @@ fi
 if grep -Eiq 'FATAL EXCEPTION|AndroidRuntime.*FATAL|NEEDLEBEAT_QA_SHARE_FAILED' "$evidence/logcat.txt"; then
   fail 'Uncaught Android error detected'
 fi
-# A software GPU that cannot link Godot's GLES3 shaders can produce an all-gray
-# screen even though input and WAV-sharing code are running correctly.
+# Fail visibly if the old software GPU uniform shader-link error reappears.
 if grep -Fq 'Fragment shader active uniforms exceed GL_MAX_FRAGMENT_UNIFORM_VECTORS' "$evidence/after_tap_logcat.txt" "$evidence/logcat.txt"; then
   fail 'Android GLES3 canvas shader exceeded emulator GPU uniform limit'
 fi
+# Save one real scored pin on Android, then terminate the process.
+adb shell am force-stop "$package"
+adb logcat -c
+adb shell am start -W -a android.intent.action.MAIN -c android.intent.category.LAUNCHER \
+    -p "$package" --es needlebeat.qa checkpoint_seed
+for attempt in $(seq 1 30); do
+  adb logcat -d -t 10000 > "$evidence/checkpoint_seed_logcat.txt" || true
+  if grep -q 'NEEDLEBEAT_QA_CHECKPOINT_SAVED' "$evidence/checkpoint_seed_logcat.txt"; then break; fi
+  if grep -Eq 'NEEDLEBEAT_QA_CHECKPOINT_.*(INCOMPLETE|NOT_DURABLE|NO_WINDOW)|FATAL EXCEPTION' "$evidence/checkpoint_seed_logcat.txt"; then
+    fail 'Cannot persist an active record before Android process death'
+  fi
+  sleep 2
+done
+grep -q 'NEEDLEBEAT_QA_CHECKPOINT_SAVED' "$evidence/checkpoint_seed_logcat.txt" || fail 'Session checkpoint did not persist'
+adb shell am force-stop "$package"
+adb logcat -c
+adb shell am start -W -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -p "$package"
+for attempt in $(seq 1 30); do
+  adb logcat -d -t 10000 > "$evidence/checkpoint_restore_logcat.txt" || true
+  if grep -q 'NEEDLEBEAT_QA_SESSION_RESTORED stage=0 placed=1' "$evidence/checkpoint_restore_logcat.txt"; then break; fi
+  if grep -Eq 'FATAL EXCEPTION|SCRIPT ERROR' "$evidence/checkpoint_restore_logcat.txt"; then
+    fail 'Restoration crashed after Android process death'
+  fi
+  sleep 2
+done
+grep -q 'NEEDLEBEAT_QA_SESSION_RESTORED stage=0 placed=1' "$evidence/checkpoint_restore_logcat.txt" || fail 'Android relaunch did not recover an unfinished record'
+adb shell screencap -p /sdcard/needlebeat_recovered.png
+adb pull /sdcard/needlebeat_recovered.png "$evidence/recovered.png" >/dev/null
+
 if [ "$touch_failure" -ne 0 ] || [ "$visual_failure" -ne 0 ]; then
   fail 'Android screen or touch regression; see emulator evidence'
 fi
-echo 'ANDROID_EMULATOR_PASS: launch, touch, PCM WAV, native sharesheet'
+echo 'ANDROID_EMULATOR_PASS: launch, touch, PCM WAV, native sharesheet, process-death recovery'

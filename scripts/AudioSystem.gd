@@ -44,6 +44,21 @@ func resume_playback() -> void:
 	player.stream_paused = false
 	paused = false
 
+# Recreate the in-flight sequencer position after restoration. Never attempt
+# to buffer minutes of audio just to reach the saved musical transport frame.
+func seek_seconds(seconds: float) -> void:
+	if not running or playback == null:
+		return
+	var was_paused := paused
+	player.stop()
+	mixer.seek_frame(roundi(maxf(0.0, seconds) * float(NBMusicEngine.RATE)))
+	player.play()
+	playback = player.get_stream_playback() as AudioStreamGeneratorPlayback
+	running = playback != null
+	paused = was_paused
+	player.stream_paused = was_paused
+	_pump()
+
 func set_events(events: Array) -> void:
 	mixer.set_events(events)
 

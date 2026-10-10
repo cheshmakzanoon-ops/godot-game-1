@@ -32,7 +32,7 @@ Place the project folder at the root of a GitHub repository. On push or via `wor
 
 The Play Store requires a signed release **AAB**, not an unsigned or debug APK. Enable **Gradle Build** in the Android export preset, install the Android build template, configure a securely stored release signing key, update version code and package identity, and use `--export-release` to generate an `.aab`. Do not place keystore passwords in the repo. Complete Android audio-focus, haptic, permission, thermal, accessibility, crash, privacy, and Play policy tests before production rollout.
 
-The game itself is designed for offline play, does not need microphone permission, and does not make network calls. Android share chooser for **text** is implemented via the built-in `AndroidRuntime` bridge; third-party WAV sharing via secure `content://` URI is pending.
+The game itself is designed for offline play, does not need microphone permission, and does not make network calls. Both text codes and PCM WAV exports use Android's existing share chooser, with a secure `content://` URI for audio; the emulator integration test passed October 10, 2026. Real handset transfer and recipient playback remain unverified.
 
 ## Android audio sharing (Godot 4.7.2 built-in FileProvider)
 
@@ -73,6 +73,18 @@ Emulator screenshots, logs and window state are uploaded as a separate
 in release builds and inactive for ordinary user launches. This is **not** a
 substitute for physical-device speaker/Bluetooth latency and tap tests.
 
-### Software emulator graphics compatibility
+## Background interruption and process-death checkpoint test
 
-An Android 15 emulator previously produced solid-gray captures while gameplay and secure WAV sharing executed successfully. The diagnostic Android log showed `CanvasShaderGLES3`/`SceneShaderGLES3` failing to link because the old `swiftshader_indirect` GPU implementation exceeded `GL_MAX_FRAGMENT_UNIFORM_VECTORS (261)`. The emulator CI configuration now uses the Android-supported `-gpu swangle` renderer (ANGLE over SwiftShader) to isolate this GPU-driver limitation while retaining the game's Godot Compatibility renderer and all visual assertions. If an emulator still fails, inspect `NEEDLEBEAT_DROP_Emulator_Evidence` instead of treating headless screenshots as real-phone rendering proof. Physical Android hardware verification remains required.
+Android may terminate the game while suspended; an unfinished four-layer
+track should not disappear. The game saves `active_song` after every scored
+shot and again when Godot sends the Android pause/focus-out notification.
+Upon restarting, the saved record is shown paused with an explicit Continue
+button. The checkpoint is erased after song completion or Exit to Studio.
+A mid-flight shot is canceled so it cannot land without the player watching.
+
+The CI pipeline executes the headless `tests/checkpoint_flow.gd` suite, then
+in the emulator it launches the debug-only `checkpoint_seed` intent, force-stops
+the package, and launches the normal game. The required log marker is
+`NEEDLEBEAT_QA_SESSION_RESTORED stage=0 placed=1`. Screenshot/PLAY/WAV sharing
+checks are still required independently. Debug-only QA extras are not loaded
+in release builds. See `docs/SESSION_RECOVERY.md` for the schema and failure policy.

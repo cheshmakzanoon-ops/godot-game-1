@@ -11,12 +11,12 @@ Updated: 2026-10-10.
 | Ahead-of-time PCM audio buffer / offline WAV | `AudioSystem.gd` | Source written; Godot 4.7.2 smoke verified |
 | Five unlocked genres | `StageDirector.gd`, `ProgressStore.gd` | Source written |
 | Optional two-shot encore | `Game.gd` | Source written |
-| Local versioned saves / backup / 20 favorites | `ProgressStore.gd` | Source written |
+| Local versioned saves / backup / 20 favorites | `ProgressStore.gd` | Godot disk/backup tests pass |
 | UTC seed / daily comparability | `StageDirector.gd` | Date-derived seed; local tests pass, cross-device test pending |
 | Song code export/import / checksum | `SongCodec.gd` | Godot 4.7.2 smoke verified |
 | Android song-code text share | `AndroidShare.gd` | Godot 4.7 AndroidRuntime API integration; device test pending |
 | Standard PCM WAV written to `user://exports` | `AudioSystem.gd` | Godot 4.7.2 smoke verified |
-| WAV Android secure share chooser/FileProvider | Not yet wired | **Incomplete** |
+| WAV Android secure share chooser/FileProvider | `AndroidShare.gd` | Android 15 emulator acceptance passed 2026-10-10; real phone pending |
 | Portrait vector editorial UI | `Game.gd` | Needs screenshot QA and live device visual verification |
 | First-party source under 5,000 lines | Test-enforced | Pass |
 | Android debug APK | Export preset and Actions workflow | Signed ARM64 debug APK passed 2026-10-09 GitHub Actions, including v2/v3 APK signature validation |
@@ -44,3 +44,19 @@ Godot 4.7.2 headless import succeeded; 15/15 smoke assertions passed. A nonfatal
 - Python security wiring tests and Godot desktop export regression pass.
 - Android CI validates the FileProvider manifest entry and produces ARM64 APK.
 - Real-device chooser delivery and WAV playback still need testing.
+
+### In-progress song recovery — October 10, 2026
+- `Game.gd` persists a compact, versioned `active_song` checkpoint on each
+  successful shot, stage advance, collision, pause and optional encore decision.
+- `ProgressStore.gd` saves it alongside the existing v1 offline progress and
+  transparently recovers through the last-known-good backup if the primary JSON
+  is incomplete. Older save files without `active_song` remain valid.
+- A restart reconstructs the deterministic obstacle layout and musical transport,
+  then shows `RECOVERED` with an explicit continue action. In-flight shots are
+  refunded rather than creating accidental notes or points.
+- `MusicEngine.gd` has a bounded one-second lookback seeking method. It exactly
+  matched continuously rendered PCM in the sample comparison test and preserves
+  v1/v2 share-code audio semantics.
+- New automated checks: `tests/checkpoint_flow.gd` (29+ assertions), and an
+  Android emulator force-stop / ordinary-relaunch checkpoint probe in
+  `tools/android_emulator_smoke.sh`. Physical-device verification still required.

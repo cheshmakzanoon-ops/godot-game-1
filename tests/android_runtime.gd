@@ -6,6 +6,7 @@ extends Node
 # An ordinary player launch, or any release build, never runs this probe.
 const EXTRA := "needlebeat.qa"
 const COMMAND := "wav_share"
+const CHECKPOINT_COMMAND := "checkpoint_seed"
 const PROBE_WAV := "user://exports/needlebeat_qa_smoke.wav"
 
 func _ready() -> void:
@@ -20,9 +21,13 @@ func _ready() -> void:
 		printerr("NEEDLEBEAT_QA_ACTIVITY_UNAVAILABLE")
 		return
 	var intent = activity.getIntent()
-	if intent == null or str(intent.getStringExtra(EXTRA)) != COMMAND:
+	if intent == null:
 		return
-	call_deferred("_test_wav_share")
+	var instruction := str(intent.getStringExtra(EXTRA))
+	if instruction == COMMAND:
+		call_deferred("_test_wav_share")
+	elif instruction == CHECKPOINT_COMMAND:
+		call_deferred("_seed_recovery_checkpoint")
 
 func _test_wav_share() -> void:
 	var parent = get_parent()
@@ -51,3 +56,37 @@ func _test_wav_share() -> void:
 		print("NEEDLEBEAT_QA_SHARE_REQUESTED")
 	else:
 		printerr("NEEDLEBEAT_QA_SHARE_FAILED")
+
+# CI-only process-death test. A single safe embedded shot is written through
+# the production save path before adb force-stops the app. The next ordinary
+# launch must recover it without the QA intent or replaying the shot.
+func _seed_recovery_checkpoint() -> void:
+	var game = get_parent()
+	if game == null:
+		printerr("NEEDLEBEAT_QA_CHECKPOINT_NO_GAME")
+		return
+	game.call("_start_song", false)
+	var shot_time := -1.0
+	for i in range(14000):
+		var candidate := 0.3 + float(i) * 0.0075
+		var angle := NBGeometry.impact_local_angle(candidate, game.motion)
+		if not bool(NBGeometry.evaluate(angle, game.pins, game.active_lane)["hit"]):
+			shot_time = candidate
+			break
+	if shot_time < 0.0:
+		printerr("NEEDLEBEAT_QA_CHECKPOINT_NO_WINDOW")
+		return
+	game.call("_fire")
+	game.flight_start = shot_time
+	game.stage_clock = shot_time + NBGeometry.FLIGHT
+	game.call("_land_shot")
+	game.call("_pause_game")
+	var current: Dictionary = game.store.data.get("active_song", {})
+	var saved: Variant = JSON.parse_string(FileAccess.get_file_as_string(NBProgressStore.FILE))
+	if game.events.size() != 1 or current.get("placed", -1) != 1 or typeof(saved) != TYPE_DICTIONARY:
+		printerr("NEEDLEBEAT_QA_CHECKPOINT_INCOMPLETE")
+		return
+	if int(saved.get("active_song", {}).get("placed", -1)) != 1:
+		printerr("NEEDLEBEAT_QA_CHECKPOINT_NOT_DURABLE")
+		return
+	print("NEEDLEBEAT_QA_CHECKPOINT_SAVED stage=0 placed=1")

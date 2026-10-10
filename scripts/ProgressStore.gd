@@ -6,6 +6,8 @@ const BACKUP := "user://save_v1_backup.json"
 const VERSION := 1
 
 var data: Dictionary = {}
+var file_path := FILE
+var backup_path := BACKUP
 var save_enabled := true # Allows isolated headless integration tests without modifying player saves.
 
 func _init() -> void:
@@ -13,14 +15,17 @@ func _init() -> void:
 
 func _defaults() -> Dictionary:
 	return {"version": VERSION, "campaign_index": 0, "completed": 0,
-		"best": {}, "daily": {}, "favorites": [], "settings": {
+		"best": {}, "daily": {}, "favorites": [], "active_song": {}, "settings": {
 			"music": 0.8, "effects": true, "motion": true, "haptics": true}}
 
 func _read_valid(path: String) -> Dictionary:
 	if not FileAccess.file_exists(path):
 		return {}
 	var raw := FileAccess.get_file_as_string(path)
-	var value: Variant = JSON.parse_string(raw)
+	var parser := JSON.new()
+	if parser.parse(raw) != OK:
+		return {}
+	var value: Variant = parser.data
 	if typeof(value) != TYPE_DICTIONARY or int(value.get("version", -1)) != VERSION:
 		return {}
 	if not value.has("campaign_index") or not value.has("favorites"):
@@ -28,9 +33,9 @@ func _read_valid(path: String) -> Dictionary:
 	return value
 
 func load_progress() -> void:
-	data = _read_valid(FILE)
+	data = _read_valid(file_path)
 	if data.is_empty():
-		data = _read_valid(BACKUP)
+		data = _read_valid(backup_path)
 	if data.is_empty():
 		data = _defaults()
 	for key in _defaults():
@@ -40,13 +45,13 @@ func load_progress() -> void:
 func save() -> void:
 	if not save_enabled:
 		return
-	var previous := _read_valid(FILE)
+	var previous := _read_valid(file_path)
 	if not previous.is_empty():
-		var backup := FileAccess.open(BACKUP, FileAccess.WRITE)
+		var backup := FileAccess.open(backup_path, FileAccess.WRITE)
 		if backup != null:
 			backup.store_string(JSON.stringify(previous))
 			backup.close()
-	var file := FileAccess.open(FILE, FileAccess.WRITE)
+	var file := FileAccess.open(file_path, FileAccess.WRITE)
 	if file != null:
 		file.store_string(JSON.stringify(data))
 		file.close()

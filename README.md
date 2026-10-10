@@ -4,7 +4,7 @@
 
 This is an actual Godot 4 portrait project implementing the core game described in `design/ORIGINAL_GDD.md`. It includes gameplay source, 50 original synthesized sound effects/instruments, a deterministic four-bar music sequencer, saves, song codes, a daily challenge, tests, Android export preset, and a GitHub Actions workflow.
 
-**Current verification:** Godot **4.7.2** imports and runs this project. Both engine suites pass (smoke tests and a 191+ assertion full four-record session), along with six host tests. GitHub Actions compiled and verified a **signed ARM64 Android debug APK** on October 9, 2026; real-device audio and touch testing remains outstanding. New musical compositions use **NBD2**: seed-driven, genre-specific chord progressions with chord-tone downbeats. Original **NBD1** codes replay byte-identically with the old music grammar. See `docs/DEVELOPMENT_HANDOFF.md`.
+**Current verification:** Godot **4.7.2** imports and runs this project. The Godot smoke, full-game and process-recovery suites now execute in CI alongside the Python tests. GitHub Actions previously built a signed ARM64 debug APK and passed the Android 15 emulator's launch, tap, WAV export and native sharing gate on October 10, 2026; physical-device audio and touch testing remains outstanding. New musical compositions use **NBD2**: seed-driven, genre-specific chord progressions with chord-tone downbeats. Original **NBD1** codes replay byte-identically with the old music grammar. See `docs/DEVELOPMENT_HANDOFF.md`.
 
 ## Open and play
 
@@ -25,15 +25,16 @@ Desktop mouse click and Android single-finger taps have the same semantics. The 
 - A **four-bar 16-step composition** built from landed pins. NBD2 includes three seed-selected progressions per genre, correct major/minor chord quality, chord-tone melody on downbeats, a shared ahead-of-time audio buffer and WAV renderer. NBD1 remains exact for existing share codes.
 - Five playable genre palettes: PULSE, CASSETTE, POCKET, PIXEL, AFTER HOURS. Unlock after 0/3/8/16/30 completed campaign songs.
 - UTC daily challenge derived from stable SHA-256 and fixed difficulty independent of campaign progression. Local, non-authoritative daily best scores only.
-- Versioned offline save and valid backup, up to 20 favorite songs, `NBD2` share codes with checksum, numeric bounds checks, and fully supported legacy `NBD1` import and playback.
+- Versioned offline saves with backup recovery, up to 20 favorite songs, and **in-progress song checkpoints** (notes, pins, score, retries, completed stages). Relaunch after Android process death offers an explicit **RECOVERED / CONTINUE RECORD** pause screen. Mid-flight pins are refunded rather than silently scored.
+- `NBD2` song-code checksum and bounded import with fully supported legacy `NBD1` playback.
 - 50 procedurally generated WAV instrument/effect assets, plus original game icon and code to regenerate it.
 - Desktop and Android input, haptics toggle, music level, effects toggle, reduced ambient-motion option, no account/network/ads/IAP.
 
 ## Current limitations (not production-ready)
 
 - **Godot engine and signed ARM64 debug APK verified in GitHub CI.** Real Android hardware testing, audio latency/speaker performance and true one-thumb touch playtests remain outstanding.
-- `EXPORT AUDIO (.WAV)` creates a valid RIFF/PCM file under `user://exports/`; desktop users can retrieve it from the Godot user-data folder. The **Android secure WAV share chooser/FileProvider bridge is not yet implemented**. Song codes can be shared with the Android chooser or clipboard.
-- No signed release AAB, full native Android Gradle share plugin, global leaderboard, performance/thermal playtest suite, screen reader support, or final Play Store QA.
+- `EXPORT AUDIO (.WAV)` creates a valid RIFF/PCM file under `user://exports/`; Android's native FileProvider share chooser has passed emulator QA. Real recipient-app/device testing remains outstanding.
+- No signed release AAB, global leaderboard, physical-device performance/thermal playtest suite, screen reader support, or final Play Store QA.
 - REWIND physically eases at reversal boundaries, but custom pixel-precise rendering and audio/device latency still require Android validation.
 - Audio is an original low-CPU-oriented GDScript PCM mixer at 22,050 Hz. Benchmark on an Android device before shipping; the mix-quality goal in the GDD is not yet playtest-validated.
 - UI is intentionally drawn in code; menus use editor font fallback rather than the production font art system.
@@ -50,7 +51,7 @@ scripts/StageDirector.gd        Deterministic preloads/difficulties/daily/genres
 scripts/MusicEngine.gd          Sample-accurate per-step synth arrangement mixer
 scripts/AudioSystem.gd          Generator playback and identical offline WAV mixer
 scripts/AndroidShare.gd         AndroidRuntime JavaClassWrapper text chooser
-scripts/ProgressStore.gd       Local offline checkpoints, settings, backups
+scripts/ProgressStore.gd       Local offline saves, active-song checkpoints, settings, backups
 scripts/SongCodec.gd            Versioned checked song-code import/export
 scripts/*.gd                    9 GDScript files
 assets: audio/0..4/*.wav        50 one-shots at 22.05kHz, original synthesized
@@ -61,6 +62,7 @@ tools/make_icon.py             Rebuilds icon assets
 tests/test_project.py          Host-only suite
 tests/smoke.gd                 Godot engine smoke / WAV / schema test
 tests/full_flow.gd             Four-record, score rollback, encore, v1/v2 music regression
+tests/checkpoint_flow.gd       Process-death recovery, backup fallback, transport restoration
 .github/workflows/ci.yml       Engine test + ARM64 Android debug build jobs
 export_presets.cfg             Android and Windows export presets
 design/ORIGINAL_GDD.md         Unmodified game design document
@@ -105,3 +107,18 @@ See `BUILD_ANDROID.md` for details and outstanding real-device tests.
 ## Android runtime regression test
 
 The CI workflow now includes an Android 15 x86_64 emulator gate for app startup, actual touch navigation, screenshot transitions, PCM WAV rendering and an Android share-sheet integration test using Godot's existing FileProvider. Runtime artifacts include screenshots and logcat. The test entry point is disabled in release builds and inaccessible without an explicit debug-only adb launch extra. Real devices still need audio latency and accessibility playtesting.
+
+## Interrupted sessions / Android process-death safety
+
+An unfinished song is saved after every successful shot, stage transition and
+application pause. Android is free to terminate a backgrounded process, so
+the next launch restores the same deterministic disc, planted pins, song notes,
+score and retry counts into an **explicit paused recovery screen**. A shot
+interrupted in flight is not counted; the player can fire it again. Completed
+songs and intentionally abandoned runs clear this checkpoint.
+
+`tests/checkpoint_flow.gd` covers simulated restart, JSON disk persistence,
+corrupt-primary backup recovery, accurate restored audio PCM, and no score
+duplication. The Android emulator script additionally force-stops the running
+app after a debug-only one-shot checkpoint and checks that an ordinary relaunch
+restores it. See `docs/SESSION_RECOVERY.md`.

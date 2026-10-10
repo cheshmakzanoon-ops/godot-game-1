@@ -41,6 +41,7 @@ var stage_clock := 0.0
 var stage_origin_usec := 0
 var paused_from := ""
 var paused_at_usec := 0
+var recovered_session := false
 var effect_clock := 0.0
 var flight_start := 0.0
 var flight_lane := 0
@@ -74,6 +75,7 @@ func _ready() -> void:
 	add_child(import_field)
 	get_viewport().size_changed.connect(_refresh_layout)
 	_refresh_layout()
+	_restore_active_song()
 	queue_redraw()
 	# Optional on-device instrumentation; guarded by Android debug export and intent extra.
 	if OS.get_name() == "Android" and OS.has_feature("debug"):
@@ -247,6 +249,150 @@ func _change_genre(direction: int) -> void:
 			selected_genre = candidate
 			break
 
+# A small, versioned checkpoint is committed after each scored shot and every
+# stage transition, so Android can kill a backgrounded process without erasing
+# a partially composed song. A mid-flight pin is deliberately not committed.
+func _checkpoint_session() -> void:
+	var state := paused_from if screen == "PAUSED" else screen
+	if state not in ["RECORD", "FLIGHT", "FAIL", "ENCORE", "STAGE_CLEAR"]:
+		return
+	if state == "FLIGHT":
+		state = "RECORD"
+	store.data["active_song"] = {
+		"v": 1, "screen": state, "daily": is_daily, "daily_date": daily_date,
+		"song_index": song_index, "seed": seed, "genre": genre,
+		"bpm": bpm, "music_version": music_version, "stage_index": stage_index,
+		"pins": pins.duplicate(true), "events": events.duplicate(true),
+		"placed": placed, "active_lane": active_lane, "stage_points": stage_points,
+		"stage_perfects": stage_perfects, "total_score": total_score,
+		"perfect_count": perfect_count, "miss_count": miss_count,
+		"retries": retries, "combo": combo, "encore_remaining": encore_remaining,
+		"encore_snapshot": encore_snapshot.duplicate(true),
+		"stage_time": stage_clock,
+		"effect_clock": effect_clock
+	}
+	store.save()
+
+func _checkpoint_is_valid(value: Variant) -> bool:
+	if typeof(value) != TYPE_DICTIONARY or int(value.get("v", -1)) != 1:
+		return false
+	if str(value.get("screen", "")) not in ["RECORD", "FAIL", "ENCORE", "STAGE_CLEAR"]:
+		return false
+	var gi := int(value.get("genre", -1))
+	var si := int(value.get("stage_index", -1))
+	if gi not in range(5) or si not in range(4):
+		return false
+	if int(value.get("bpm", -1)) != int(NBStageDirector.BPMS[gi]):
+		return false
+	if int(value.get("music_version", -1)) not in [1, NBMusicEngine.MUSIC_VERSION]:
+		return false
+	if typeof(value.get("pins")) != TYPE_ARRAY or typeof(value.get("events")) != TYPE_ARRAY:
+		return false
+	var saved_pins: Array = value["pins"]
+	var saved_events: Array = value["events"]
+	if saved_pins.size() > 50 or saved_events.size() > 42:
+		return false
+	var required := NBStageDirector.create_stage(int(value.get("seed", 0)), si,
+		24 if bool(value.get("daily", false)) else int(value.get("song_index", 0)),
+		int(value["bpm"]), bool(value.get("daily", false)))
+	if int(value.get("placed", -1)) < 0 or int(value.get("placed", -1)) > int(required["quota"]):
+		return false
+	if saved_pins.size() < required["preloads"].size():
+		return false
+	for pin in saved_pins:
+		if typeof(pin) != TYPE_DICTIONARY or not pin.has("angle") or typeof(pin["angle"]) not in [TYPE_FLOAT, TYPE_INT]:
+			return false
+		if int(pin.get("lane", -1)) not in [0, 1]:
+			return false
+	for note in saved_events:
+		if typeof(note) != TYPE_DICTIONARY or int(note.get("layer", -1)) not in range(4) or int(note.get("step", -1)) not in range(16):
+			return false
+	var seconds := float(value.get("stage_time", -1.0))
+	if not is_finite(seconds) or seconds < 0.0 or seconds > 86400.0:
+		return false
+	if typeof(value.get("encore_snapshot")) != TYPE_DICTIONARY:
+		return false
+	if int(value.get("active_lane", -1)) not in [0, 1]:
+		return false
+	if saved_pins.size() > required["preloads"].size() + int(required["quota"]) + 2:
+		return false
+	for key in ["daily", "daily_date", "song_index", "seed", "placed", "combo", "retries",
+		"stage_points", "stage_perfects", "total_score", "perfect_count", "miss_count",
+		"encore_remaining", "effect_clock"]:
+		if not value.has(key):
+			return false
+	for key in ["placed", "combo", "retries", "stage_points", "stage_perfects", "total_score",
+		"perfect_count", "miss_count", "encore_remaining"]:
+		if int(value[key]) < 0 or int(value[key]) > 10000000:
+			return false
+	if int(value["encore_remaining"]) > 2:
+		return false
+	if str(value["screen"]) == "ENCORE":
+		if int(value["encore_remaining"]) == 0:
+			return false
+		var encore: Dictionary = value["encore_snapshot"]
+		if typeof(encore.get("pins")) != TYPE_ARRAY or typeof(encore.get("events")) != TYPE_ARRAY:
+			return false
+	for time_key in ["stage_time", "effect_clock"]:
+		if typeof(value.get(time_key)) not in [TYPE_FLOAT, TYPE_INT]:
+			return false
+	for pin in saved_pins:
+		if not is_finite(float(pin["angle"])):
+			return false
+	return true
+
+func _restore_active_song() -> void:
+	var saved: Variant = store.data.get("active_song", {})
+	if typeof(saved) != TYPE_DICTIONARY or saved.is_empty():
+		return
+	if not _checkpoint_is_valid(saved):
+		store.data["active_song"] = {}
+		store.save()
+		return
+	is_daily = bool(saved["daily"])
+	daily_date = str(saved["daily_date"])
+	song_index = int(saved["song_index"])
+	seed = int(saved["seed"])
+	genre = int(saved["genre"])
+	bpm = int(saved["bpm"])
+	music_version = int(saved["music_version"])
+	stage_index = int(saved["stage_index"])
+	stage = NBStageDirector.create_stage(seed, stage_index, 24 if is_daily else song_index, bpm, is_daily)
+	motion.configure(float(stage["initial_phase"]), float(bpm), float(stage["velocity"]), str(stage["special"]))
+	pins = saved["pins"].duplicate(true)
+	events = saved["events"].duplicate(true)
+	placed = int(saved["placed"])
+	active_lane = int(saved["active_lane"])
+	stage_points = int(saved["stage_points"])
+	stage_perfects = int(saved["stage_perfects"])
+	total_score = int(saved["total_score"])
+	perfect_count = int(saved["perfect_count"])
+	miss_count = int(saved["miss_count"])
+	retries = int(saved["retries"])
+	combo = int(saved["combo"])
+	encore_remaining = int(saved["encore_remaining"])
+	encore_snapshot = saved["encore_snapshot"].duplicate(true)
+	stage_clock = float(saved["stage_time"])
+	effect_clock = float(saved["effect_clock"])
+	stage_origin_usec = Time.get_ticks_usec() - roundi(stage_clock * 1000000.0)
+	paused_at_usec = Time.get_ticks_usec()
+	paused_from = str(saved["screen"])
+	screen = "PAUSED" # Never resume an interrupted shot without player consent.
+	recovered_session = true
+	if paused_from != "FAIL":
+		audio.configure(genre, bpm, events, music_version, seed)
+		# Rebuild the sound at the restored physical clock, rather than adding
+		# another streaming-buffer lead on every restart.
+		audio.seek_seconds(stage_clock)
+		audio.pause_playback()
+	else:
+		audio.stop()
+	selected_genre = genre
+	feedback = "TRACK RECOVERED / TAP RESUME"
+	if OS.get_name() == "Android" and OS.has_feature("debug"):
+		print("NEEDLEBEAT_QA_SESSION_RESTORED stage=", stage_index, " placed=", placed)
+	queue_redraw()
+
 func _pause_game() -> void:
 	if screen == "PAUSED":
 		return
@@ -254,20 +400,27 @@ func _pause_game() -> void:
 	paused_at_usec = Time.get_ticks_usec()
 	screen = "PAUSED"
 	audio.pause_playback()
+	_checkpoint_session()
 
 func _resume_game() -> void:
 	if screen != "PAUSED":
 		return
 	stage_origin_usec += Time.get_ticks_usec() - paused_at_usec
 	screen = paused_from
+	recovered_session = false
 	audio.resume_playback()
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_APPLICATION_PAUSED or what == NOTIFICATION_APPLICATION_FOCUS_OUT:
 		if screen in ["RECORD", "FLIGHT", "FAIL", "ENCORE", "STAGE_CLEAR", "DROP_SHOW", "PREVIEW", "DROP_PAUSE"]:
 			_pause_game()
+		elif screen == "PAUSED":
+			_checkpoint_session()
 
 func _open_menu() -> void:
+	recovered_session = false
+	store.data["active_song"] = {}
+	store.save()
 	audio.stop()
 	import_field.visible = false
 	screen = "MENU"
@@ -315,11 +468,13 @@ func _setup_stage() -> void:
 	events = previous
 	screen = "RECORD"
 	audio.configure(genre, bpm, events, music_version, seed)
+	_checkpoint_session()
 
 func _fire() -> void:
 	flight_start = float(Time.get_ticks_usec() - stage_origin_usec) / 1000000.0
 	flight_lane = active_lane
 	screen = "FLIGHT"
+	_checkpoint_session()
 
 func _land_shot() -> void:
 	var angle := NBGeometry.impact_local_angle(flight_start, motion)
@@ -337,6 +492,7 @@ func _land_shot() -> void:
 		feedback_timer = 0.8
 		effect_clock = stage_clock
 		screen = "FAIL"
+		_checkpoint_session()
 		audio.stop()
 		_vibrate(45)
 		return
@@ -371,6 +527,7 @@ func _land_shot() -> void:
 			_next_stage()
 		else:
 			screen = "ENCORE"
+			_checkpoint_session()
 		return
 	placed += 1
 	if placed >= int(stage["quota"]):
@@ -378,6 +535,7 @@ func _land_shot() -> void:
 		_feedback("RECORD COMPLETE", 0.9)
 	else:
 		screen = "RECORD"
+	_checkpoint_session()
 
 func _feedback(message: String, duration: float) -> void:
 	feedback = message
@@ -392,6 +550,7 @@ func _begin_encore() -> void:
 		"points": stage_points, "perfects": stage_perfects}
 	encore_remaining = 2
 	screen = "ENCORE"
+	_checkpoint_session()
 
 func _restore_encore() -> void:
 	pins = encore_snapshot["pins"].duplicate(true)
@@ -417,6 +576,7 @@ func _complete_song() -> void:
 		"events": events.duplicate(true),
 		"score": total_score, "daily": is_daily, "date": daily_date}
 	last_song["code"] = NBSongCodec.encode(last_song)
+	store.data["active_song"] = {}
 	store.record_success(song_index, total_score, is_daily, daily_date,
 		{"score": total_score, "perfects": perfect_count, "retries": retries,
 		"misses": miss_count, "code": last_song["code"]})
@@ -801,7 +961,7 @@ func _draw_settings(palette: Array) -> void:
 
 func _draw_pause_overlay(palette: Array) -> void:
 	draw_rect(Rect2(0, 181, WIDTH, 495), Color(palette[0].r, palette[0].g, palette[0].b, .93))
-	_text("PAUSED", 53, 383, 65, palette[1])
-	_text("THE RECORD IS WAITING FOR YOU.", 56, 427, 15, palette[4])
+	_text("RECOVERED" if recovered_session else "PAUSED", 53, 383, 55, palette[1])
+	_text("CONTINUE YOUR UNFINISHED RECORD." if recovered_session else "THE RECORD IS WAITING FOR YOU.", 56, 427, 15, palette[4])
 	_button(Rect2(44, 473, 392, 64), "CONTINUE RECORD", palette)
 	_button(Rect2(44, 549, 392, 58), "EXIT TO STUDIO", palette, "secondary")

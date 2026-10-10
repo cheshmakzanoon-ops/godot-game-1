@@ -57,3 +57,18 @@ account is required. The provider is defined by Godot's Android library.
 an audio-capable target, and check that the recipient can open the 4-bar WAV;
 repeat after background/resume, a cancelled chooser, and with no target app.
 Android device testing remains outstanding until an actual device is used.
+
+## Android emulator runtime gate
+
+The `android-emulator` GitHub Actions job runs on an API 35 x86_64 emulator. The
+shipping ARM64 debug artifact is unchanged. CI exports a separate x86_64-only
+APK, installs and launches it, taps PLAY, verifies screenshots are distinct,
+then launches a **debug-only** test intent with `needlebeat.qa=wav_share`. The
+Godot test script generates a RIFF PCM WAV and invokes the actual Android
+`FileProvider` share chooser. The test fails unless Android logcat confirms
+the WAV and share intent and the Android sharesheet becomes visible.
+
+Emulator screenshots, logs and window state are uploaded as a separate
+`NEEDLEBEAT_DROP_Emulator_Evidence` artifact. The instrumentation is disabled
+in release builds and inactive for ordinary user launches. This is **not** a
+substitute for physical-device speaker/Bluetooth latency and tap tests.

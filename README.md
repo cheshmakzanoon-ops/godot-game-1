@@ -101,3 +101,7 @@ temporarily grants `content://` read access to the selected WAV only.
 No Gradle custom build, plugin, external storage permission or network is
 needed. Desktop exports remain saved under the Godot user-data directory.
 See `BUILD_ANDROID.md` for details and outstanding real-device tests.
+
+## Android runtime regression test
+
+The CI workflow now includes an Android 15 x86_64 emulator gate for app startup, actual touch navigation, screenshot transitions, PCM WAV rendering and an Android share-sheet integration test using Godot's existing FileProvider. Runtime artifacts include screenshots and logcat. The test entry point is disabled in release builds and inaccessible without an explicit debug-only adb launch extra. Real devices still need audio latency and accessibility playtesting.

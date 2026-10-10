@@ -52,6 +52,8 @@ func run_checks() -> void:
 	verify(system.export_wav(song["events"], 2, 112, path), "complete four-bar WAV export")
 	var wav := FileAccess.open(path, FileAccess.READ)
 	verify(wav != null and wav.get_buffer(4).get_string_from_ascii() == "RIFF", "WAV RIFF header")
+	var android_qa = load("res://tests/android_runtime.gd")
+	verify(android_qa != null and android_qa.can_instantiate(), "debug-only Android runtime QA script parses")
 	var scene: PackedScene = load("res://scenes/Main.tscn")
 	verify(scene != null, "main scene loads")
 	if scene != null:

@@ -75,6 +75,10 @@ func _ready() -> void:
 	get_viewport().size_changed.connect(_refresh_layout)
 	_refresh_layout()
 	queue_redraw()
+	# Optional on-device instrumentation; guarded by Android debug export and intent extra.
+	if OS.get_name() == "Android" and OS.has_feature("debug"):
+		var qa_probe = load("res://tests/android_runtime.gd").new()
+		add_child(qa_probe)
 
 func _refresh_layout() -> void:
 	adapt_scale = minf(size.x / WIDTH, size.y / HEIGHT)
@@ -263,6 +267,8 @@ func _open_menu() -> void:
 	feedback = ""
 
 func _start_song(daily: bool) -> void:
+	if OS.get_name() == "Android" and OS.has_feature("debug"):
+		print("NEEDLEBEAT_QA_PLAY_STARTED")
 	is_daily = daily
 	daily_date = NBStageDirector.daily_date() if daily else ""
 	song_index = int(store.data["campaign_index"])

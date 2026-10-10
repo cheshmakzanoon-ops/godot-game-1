@@ -79,3 +79,45 @@ jobs:
           name: NEEDLEBEAT_DROP_Android_ARM64_Debug
           path: build/NEEDLEBEAT_DROP-debug.apk
           if-no-files-found: error
+      - name: Export x86_64 debug APK for emulator runtime QA
+        run: |
+          sed -i 's/architectures\/arm64-v8a=true/architectures\/arm64-v8a=false/; s/architectures\/x86_64=false/architectures\/x86_64=true/' export_presets.cfg
+          godot --headless --path . --export-debug Android build/NEEDLEBEAT_DROP-x86_64-debug.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NEEDLEBEAT_DROP_Android_x86_64_Debug
+          path: build/NEEDLEBEAT_DROP-x86_64-debug.apk
+          if-no-files-found: error
+
+  android-emulator:
+    needs: android-debug
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: NEEDLEBEAT_DROP_Android_x86_64_Debug
+          path: build
+      - name: Enable KVM acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Install, launch, tap, export WAV and check sharesheet
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-snapshot -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          script: bash tools/android_emulator_smoke.sh
+      - name: Upload emulator diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: NEEDLEBEAT_DROP_Emulator_Evidence
+          path: build/emulator-evidence/
+          if-no-files-found: ignore

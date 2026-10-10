@@ -36,9 +36,11 @@ Godot 4.7.2 headless import succeeded; 15/15 smoke assertions passed. A nonfatal
 - Live Android rendering/touch/audio focus and WAV share chooser/FileProvider remain release blockers.
 
 ### Native audio sharing milestone (October 2026)
-- GDScript WAV-export action now invokes `NBAndroidShare.share_wav` on Android.
-- Android Gradle template overlay uses an exported=false `FileProvider`, cache-only
-  file mapping, temporary content URI read grants, and native ACTION_SEND chooser.
-- Desktop still stores the WAV under user data; file sharing is not attempted there.
-- CI now installs the Gradle template and validates that the Android bridge is packaged.
-- Physical-device intent delivery/playback still requires a hardware test.
+- Android WAV export invokes `NBAndroidShare.share_wav` after rendering.
+- Godot 4.7.2's built-in `FileProvider` issues temporary per-URI read grants
+  via `JavaClassWrapper` and the system ACTION_SEND chooser.
+- No new Android manifest/provider, Java plugin or Gradle build dependency.
+- Desktop WAV export and fallback behavior remain unchanged.
+- Python security wiring tests and Godot desktop export regression pass.
+- Android CI validates the FileProvider manifest entry and produces ARM64 APK.
+- Real-device chooser delivery and WAV playback still need testing.

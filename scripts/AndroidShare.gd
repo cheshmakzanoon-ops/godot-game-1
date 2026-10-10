@@ -2,8 +2,7 @@ class_name NBAndroidShare
 extends RefCounted
 
 # Android 4.7 JavaClassWrapper bridge: share song text with the system chooser.
-# Never pass a file:// URI to a third-party app. PCM .wav files are exported
-# to app storage; third-party WAV sharing needs a separate FileProvider bridge.
+# Shares text through ACTION_SEND; see share_wav for content-URI audio sharing.
 static func share_code(code: String) -> bool:
 	if OS.get_name() != "Android":
 		return false
@@ -24,10 +23,15 @@ static func share_code(code: String) -> bool:
 	activity.runOnUiThread(runtime.createRunnableFromGodotCallable(share_task))
 	return true
 
-# The Gradle-only Java bridge exposes a private cache file with a temporary
-# content:// URI. Desktop exports remain available without Android dependencies.
+# Godot 4.7's Android library already registers an AndroidX FileProvider.
+# Its authority is <applicationId>.fileprovider and filesRoot covers filesDir.
+# Use the engine's provider directly: no custom manifest, Kotlin or Gradle build.
 static func share_wav(path: String) -> bool:
-	if OS.get_name() != "Android" or not FileAccess.file_exists(path):
+	if OS.get_name() != "Android" or not path.begins_with("user://exports/"):
+		return false
+	if not path.get_file().begins_with("needlebeat_") or path.get_extension().to_lower() != "wav":
+		return false
+	if not FileAccess.file_exists(path):
 		return false
 	var runtime = Engine.get_singleton("AndroidRuntime")
 	if runtime == null:
@@ -35,12 +39,25 @@ static func share_wav(path: String) -> bool:
 	var activity = runtime.getActivity()
 	if activity == null:
 		return false
-	var bridge = JavaClassWrapper.wrap("com.needlebeat.drop.NeedlebeatShare")
-	if bridge == null:
+	var FileClass = JavaClassWrapper.wrap("java.io.File")
+	var FileProvider = JavaClassWrapper.wrap("androidx.core.content.FileProvider")
+	var file = FileClass.File(ProjectSettings.globalize_path(path))
+	var uri = FileProvider.getUriForFile(activity, activity.getPackageName() + ".fileprovider", file)
+	if JavaClassWrapper.get_exception() != null or uri == null:
 		return false
-	var accepted: bool = bridge.shareWav(activity, ProjectSettings.globalize_path(path))
-	var java_error = JavaClassWrapper.get_exception()
-	if java_error != null:
-		push_warning("Android WAV share error: " + str(java_error))
+	var Intent = JavaClassWrapper.wrap("android.content.Intent")
+	var ClipData = JavaClassWrapper.wrap("android.content.ClipData")
+	var intent = Intent.Intent()
+	intent.setAction(Intent.ACTION_SEND)
+	intent.setType("audio/wav")
+	intent.putExtra(Intent.EXTRA_STREAM, uri)
+	intent.setClipData(ClipData.newRawUri("NEEDLEBEAT WAV", uri))
+	intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+	var chooser = Intent.createChooser(intent, "Share NEEDLEBEAT WAV")
+	chooser.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+	if JavaClassWrapper.get_exception() != null:
 		return false
-	return accepted
+	var launch = func() -> void:
+		activity.startActivity(chooser)
+	activity.runOnUiThread(runtime.createRunnableFromGodotCallable(launch))
+	return JavaClassWrapper.get_exception() == null

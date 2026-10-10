@@ -1,77 +1,45 @@
-"""Android cache-only FileProvider wiring and template-overlay regressions."""
-import importlib.util
+"""Verify that sharing uses Godot 4.7's existing Android FileProvider."""
 from pathlib import Path
-import shutil
-import tempfile
 import unittest
-import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
 class AndroidWavShareTests(unittest.TestCase):
-    def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
-        self.addCleanup(self.tmp.cleanup)
-        self.project = Path(self.tmp.name)
-        shutil.copytree(ROOT / "android_native", self.project / "android_native")
-        spec = importlib.util.spec_from_file_location("prepare_android_share", ROOT / "tools/prepare_android_share.py")
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-        self.install = module.install
+    @classmethod
+    def setUpClass(cls):
+        cls.code = (ROOT / "scripts/AndroidShare.gd").read_text(encoding="utf8")
 
-    def _template(self):
-        app = self.project / "android" / "build"
-        (app / "src/main").mkdir(parents=True)
-        (app / "src/main/AndroidManifest.xml").write_text(
-            '<?xml version="1.0" encoding="utf-8"?>\n'
-            '<manifest xmlns:android="http://schemas.android.com/apk/res/android">'
-            '<application></application></manifest>', encoding="utf-8")
-        (app / "build.gradle").write_text('plugins {}\ndependencies {\n    implementation "x:y:1"\n}\n', encoding="utf-8")
-        return app
-
-    def test_android_gradle_configured(self):
+    def test_no_unnecessary_gradle_dependency(self):
         preset = (ROOT / "export_presets.cfg").read_text()
-        self.assertIn('gradle_build/use_gradle_build=true', preset)
-        self.assertIn('com.needlebeat.drop', preset)
+        self.assertIn("gradle_build/use_gradle_build=false", preset)
+        self.assertFalse((ROOT / "android_native").exists())
 
-    def test_missing_template_fails_closed(self):
-        with self.assertRaisesRegex(RuntimeError, "template missing"):
-            self.install(self.project)
+    def test_engine_native_content_provider_and_grants(self):
+        for required in ('androidx.core.content.FileProvider',
+                         '.fileprovider', 'getUriForFile(', 'java.io.File',
+                         'FLAG_GRANT_READ_URI_PERMISSION', 'setClipData(',
+                         'ACTION_SEND', 'audio/wav', 'createChooser(',
+                         'createRunnableFromGodotCallable(',
+                         'runOnUiThread(', 'user://exports/'):
+            self.assertIn(required, self.code)
+        self.assertNotIn('Uri.fromFile', self.code)
+        self.assertNotIn('file://', self.code)
+        self.assertNotIn('android.permission.READ_EXTERNAL_STORAGE', self.code)
 
-    def test_fileprovider_overlay_idempotent(self):
-        app = self._template()
-        self.install(self.project)
-        manifest = app / "src/main/AndroidManifest.xml"
-        gradle = app / "build.gradle"
-        first_manifest, first_gradle = manifest.read_text(), gradle.read_text()
-        self.install(self.project)
-        self.assertEqual(manifest.read_text(), first_manifest)
-        self.assertEqual(gradle.read_text(), first_gradle)
-        root = ET.fromstring(first_manifest)
-        ns = '{http://schemas.android.com/apk/res/android}'
-        provider = root.find('application/provider')
-        self.assertIsNotNone(provider)
-        self.assertEqual(provider.attrib[ns+'authorities'], '${applicationId}.share')
-        self.assertEqual(provider.attrib[ns+'exported'], 'false')
-        self.assertEqual(provider.attrib[ns+'grantUriPermissions'], 'true')
-        self.assertEqual(first_manifest.count('androidx.core.content.FileProvider'), 1)
-        self.assertEqual(first_gradle.count('androidx.core:core:1.13.1'), 1)
-        paths = ET.parse(app / 'src/main/res/xml/needlebeat_share_paths.xml').getroot()
-        self.assertEqual(len(paths), 1)
-        self.assertEqual(paths[0].tag, 'cache-path')
-        self.assertEqual(paths[0].attrib['path'], 'shared_audio/')
-        self.assertTrue((app / 'src/main/java/com/needlebeat/drop/NeedlebeatShare.java').is_file())
+    def test_sharing_is_guarded(self):
+        self.assertIn('path.begins_with("user://exports/")', self.code)
+        self.assertIn('path.get_extension().to_lower() != "wav"', self.code)
+        self.assertIn('path.get_file().begins_with("needlebeat_")', self.code)
+        self.assertIn('FileAccess.file_exists(path)', self.code)
+        self.assertIn('OS.get_name() != "Android"', self.code)
+        self.assertIn('JavaClassWrapper.get_exception()', self.code)
 
-    def test_java_bridge_security_guards(self):
-        java = (ROOT / 'android_native/src/main/java/com/needlebeat/drop/NeedlebeatShare.java').read_text()
-        for marker in ('getCanonicalFile()', 'getFilesDir()', 'getCacheDir()',
-                       'getUriForFile(', 'FLAG_GRANT_READ_URI_PERMISSION',
-                       'ACTION_SEND', 'setClipData(', 'audio/wav', 'MAX_AUDIO_BYTES',
-                       '.matches(', 'runOnUiThread('):
-            self.assertIn(marker, java)
-        self.assertNotIn('Uri.fromFile', java)
-        self.assertNotIn('MANAGE_EXTERNAL_STORAGE', java)
+    def test_ci_checks_fileprovider_in_apk(self):
+        workflow = (ROOT / '.github/workflows/ci.yml').read_text()
+        self.assertIn('aapt" dump xmltree', workflow)
+        self.assertIn('FileProvider', workflow)
+        self.assertNotIn('Install Godot Android Gradle', workflow)
 
 
 if __name__ == '__main__':

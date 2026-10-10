@@ -34,31 +34,26 @@ The Play Store requires a signed release **AAB**, not an unsigned or debug APK. 
 
 The game itself is designed for offline play, does not need microphone permission, and does not make network calls. Android share chooser for **text** is implemented via the built-in `AndroidRuntime` bridge; third-party WAV sharing via secure `content://` URI is pending.
 
-## Native WAV sharing (new)
+## Android audio sharing (Godot 4.7.2 built-in FileProvider)
 
-This Android export now requires a **Gradle build** so it can compile a tiny Java
-`FileProvider` bridge. After installing the Android SDK and Godot export templates:
+Godot 4.7.2 includes an AndroidX `FileProvider` with the authority
+`<applicationId>.fileprovider`, mapping the app's private `filesDir`.
+The game's `NBAndroidShare.share_wav` uses `JavaClassWrapper` and the
+`AndroidRuntime` singleton to construct a `content://` URI for the finished
+WAV in `user://exports/`, grant temporary read access, and open the native
+Android share chooser. **No custom Android plugin or Gradle template is needed.**
+
+The established non-Gradle debug APK export remains:
 
 ```bash
-mkdir -p android/build
-unzip -q "$HOME/.local/share/godot/export_templates/4.7.2.stable/android_source.zip" -d android/build
-echo '4.7.2.stable' > android/.build_version
-touch android/build/.gdignore
-chmod +x android/build/gradlew
-python tools/prepare_android_share.py
 godot --headless --path . --export-debug Android build/NEEDLEBEAT_DROP-debug.apk
 ```
 
-`tools/prepare_android_share.py` is idempotent. It injects the bridge source,
-AndroidX core dependency and provider declaration into the generated (gitignored)
-`android/build/` folder. It must be rerun whenever the template is regenerated.
-The provider can grant read access **only** to audio copied into
-`cache/shared_audio/`; exported WAVs remain in `user://exports/`.
-There is no microphone, external-storage or broad file permission.
+The recipient gets a read grant only to the chosen URI, not all user data.
+No file:// link, microphone permission, broad storage access, or network
+account is required. The provider is defined by Godot's Android library.
 
-**Device acceptance:** Complete a song, select **EXPORT / SHARE WAV**, choose
-a mail/chat/file app, verify the recipient can play the stereo four-bar WAV,
-and retry with no matching share app. Test background/resume and Android 10+.
-Those on-device checks have not yet been performed.
-
-Note: `--install-android-build-template --quit` does not install the template by itself; CI explicitly extracts the matched Godot 4.7.2 source template.
+**Real-phone acceptance:** Complete a song, tap `EXPORT / SHARE WAV`, select
+an audio-capable target, and check that the recipient can open the 4-bar WAV;
+repeat after background/resume, a cancelled chooser, and with no target app.
+Android device testing remains outstanding until an actual device is used.

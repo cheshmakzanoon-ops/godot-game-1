@@ -33,6 +33,12 @@ func run_checks() -> void:
 	var parsed := NBSongCodec.decode(code)
 	verify(not parsed.is_empty() and parsed["events"].size() == 2, "song-code round trip")
 	verify(NBSongCodec.decode(code + "A").is_empty(), "song-code checksum rejection")
+	verify(code.begins_with("NBD2.") and int(parsed.get("music_version", 0)) == 2,
+		"new songs use explicit NBD2 music version")
+	var legacy_song := song.duplicate(true)
+	legacy_song["music_version"] = 1
+	verify(NBSongCodec.decode(NBSongCodec.encode(legacy_song)).get("music_version", -1) == 1,
+		"original NBD1 codes remain importable")
 	var mixer := NBMusicEngine.new()
 	mixer.setup(2, 112, song["events"])
 	var buffer := mixer.mix(4096)

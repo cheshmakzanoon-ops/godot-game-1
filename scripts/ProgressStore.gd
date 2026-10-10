@@ -6,6 +6,7 @@ const BACKUP := "user://save_v1_backup.json"
 const VERSION := 1
 
 var data: Dictionary = {}
+var save_enabled := true # Allows isolated headless integration tests without modifying player saves.
 
 func _init() -> void:
 	load_progress()
@@ -37,6 +38,8 @@ func load_progress() -> void:
 			data[key] = _defaults()[key]
 
 func save() -> void:
+	if not save_enabled:
+		return
 	var previous := _read_valid(FILE)
 	if not previous.is_empty():
 		var backup := FileAccess.open(BACKUP, FileAccess.WRITE)

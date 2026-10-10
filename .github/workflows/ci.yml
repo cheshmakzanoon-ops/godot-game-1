@@ -21,6 +21,8 @@ jobs:
         run: godot --headless --editor --path . --import --quit
       - name: Engine-integrated gameplay and WAV smoke tests
         run: godot --headless --path . --script res://tests/smoke.gd
+      - name: Deterministic four-record / music regression tests
+        run: godot --headless --path . --script res://tests/full_flow.gd
 
   android-debug:
     needs: game-test

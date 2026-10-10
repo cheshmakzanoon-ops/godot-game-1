@@ -22,11 +22,11 @@ godot --headless --path . --export-debug 'Android' build/NEEDLEBEAT_DROP-debug.a
 adb install -r build/NEEDLEBEAT_DROP-debug.apk
 ```
 
-**Note:** A source zip is **not** an APK, and the build may reveal errors that have not been caught in the present sandbox. Run engine tests and fix any failures before using a build.
+**Note:** A source zip is **not** an APK. Debug APK export was verified on GitHub Actions with the matching Godot template and Android `apksigner` (v2 and v3). Re-run CI after making changes; hardware testing is still required.
 
 ## GitHub Actions path
 
-Place the project folder at the root of a GitHub repository. On push or via `workflow_dispatch`, `.github/workflows/ci.yml` requests the Godot 4.7.2 engine with export templates, runs the host and engine smoke tests, configures Android SDK/JDK, and attempts an ARM64 debug export. A successful job publishes the downloadable APK as a workflow artifact. The workflow has not been run here; if it fails, fix the reported step rather than treating it as a completed build.
+Place the project folder at the root of a GitHub repository. On push or via `workflow_dispatch`, `.github/workflows/ci.yml` requests the Godot 4.7.2 engine with export templates, runs the host and engine smoke tests, configures Android SDK/JDK, and attempts an ARM64 debug export. A successful job publishes the downloadable APK as a workflow artifact. The October 9, 2026 build passed Godot tests and Android signature verification. Subsequent changes must re-pass CI; download the APK from the latest successful workflow's artifacts.
 
 ## Google Play release
 

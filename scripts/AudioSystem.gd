@@ -16,8 +16,8 @@ func _ready() -> void:
 	player.stream = generator
 	add_child(player)
 
-func configure(genre: int, bpm: int, events: Array) -> void:
-	mixer.setup(genre, bpm, events)
+func configure(genre: int, bpm: int, events: Array, music_version: int = NBMusicEngine.MUSIC_VERSION, song_seed: int = 0) -> void:
+	mixer.setup(genre, bpm, events, music_version, song_seed)
 	start()
 
 func start() -> void:
@@ -72,9 +72,9 @@ func _pump() -> void:
 func elapsed_seconds() -> float:
 	return float(mixer.frame) / float(NBMusicEngine.RATE)
 
-func export_wav(events: Array, genre: int, bpm: int, out_path: String) -> bool:
+func export_wav(events: Array, genre: int, bpm: int, out_path: String, music_version: int = NBMusicEngine.MUSIC_VERSION, song_seed: int = 0) -> bool:
 	var renderer := NBMusicEngine.new()
-	renderer.setup(genre, bpm, events)
+	renderer.setup(genre, bpm, events, music_version, song_seed)
 	var total := renderer.get_loop_frame_count()
 	var f := FileAccess.open(out_path, FileAccess.WRITE)
 	if f == null:

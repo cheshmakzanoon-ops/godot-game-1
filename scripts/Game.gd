@@ -7,7 +7,7 @@ const HEIGHT := 854.0
 const CENTER := Vector2(240, 409)
 const MAIN_RADIUS := 137.0
 const INNER_RADIUS := 105.0
-const LAUNCH_Y := 716.0
+const LAUNCH_Y := 676.0
 const NAMES := ["BEAT", "ROOT", "HOOK", "DROP"]
 const LABELS := ["DRUMS", "BASS", "MELODY", "HARMONY"]
 
@@ -19,6 +19,7 @@ var screen := "MENU"
 var selected_genre := 0
 var genre := 0
 var bpm := 120
+var music_version := NBMusicEngine.MUSIC_VERSION
 var seed := 0
 var song_index := 0
 var is_daily := false
@@ -32,6 +33,7 @@ var active_lane := 0
 var stage_points := 0
 var total_score := 0
 var perfect_count := 0
+var stage_perfects := 0
 var miss_count := 0
 var combo := 0
 var retries := 0
@@ -66,7 +68,7 @@ func _ready() -> void:
 	import_field = LineEdit.new()
 	import_field.position = Vector2(40, 350)
 	import_field.size = Vector2(400, 48)
-	import_field.placeholder_text = "Paste an NBD1 song code"
+	import_field.placeholder_text = "Paste an NBD1 or NBD2 song code"
 	import_field.visible = false
 	import_field.max_length = 8192
 	add_child(import_field)
@@ -267,6 +269,7 @@ func _start_song(daily: bool) -> void:
 	seed = NBStageDirector.daily_seed(daily_date) if daily else NBStageDirector.seed_for_campaign(song_index)
 	genre = NBStageDirector.daily_genre(seed) if daily else selected_genre
 	bpm = NBStageDirector.BPMS[genre]
+	music_version = NBMusicEngine.MUSIC_VERSION
 	stage_index = 0
 	events.clear()
 	total_score = 0
@@ -284,6 +287,7 @@ func _setup_stage() -> void:
 	placed = 0
 	active_lane = 0
 	stage_points = 0
+	stage_perfects = 0
 	combo = 0
 	stage_clock = 0.0
 	stage_origin_usec = Time.get_ticks_usec()
@@ -296,7 +300,7 @@ func _setup_stage() -> void:
 			previous.append(item)
 	events = previous
 	screen = "RECORD"
-	audio.configure(genre, bpm, events)
+	audio.configure(genre, bpm, events, music_version, seed)
 
 func _fire() -> void:
 	flight_start = float(Time.get_ticks_usec() - stage_origin_usec) / 1000000.0
@@ -328,7 +332,7 @@ func _land_shot() -> void:
 	var quality := "GOOD SHOT"
 	if bool(result["perfect"]):
 		per_shot += 60
-		perfect_count += 1
+		stage_perfects += 1
 		quality = "PERFECT"
 	if bool(result["edge"]):
 		per_shot += 35
@@ -371,7 +375,7 @@ func _vibrate(milliseconds: int) -> void:
 
 func _begin_encore() -> void:
 	encore_snapshot = {"pins": pins.duplicate(true), "events": events.duplicate(true),
-		"points": stage_points, "perfects": perfect_count}
+		"points": stage_points, "perfects": stage_perfects}
 	encore_remaining = 2
 	screen = "ENCORE"
 
@@ -379,13 +383,14 @@ func _restore_encore() -> void:
 	pins = encore_snapshot["pins"].duplicate(true)
 	events = encore_snapshot["events"].duplicate(true)
 	stage_points = int(encore_snapshot["points"])
-	perfect_count = int(encore_snapshot["perfects"])
+	stage_perfects = int(encore_snapshot["perfects"])
 	encore_remaining = 0
 	audio.set_events(events)
 
 func _next_stage() -> void:
 	# Points are committed once, after a record clears or an encore resolves.
 	total_score += stage_points + 300
+	perfect_count += stage_perfects
 	encore_remaining = 0
 	if stage_index == 3:
 		_complete_song()
@@ -394,7 +399,8 @@ func _next_stage() -> void:
 		_setup_stage()
 
 func _complete_song() -> void:
-	last_song = {"genre": genre, "bpm": bpm, "seed": seed, "events": events.duplicate(true),
+	last_song = {"genre": genre, "bpm": bpm, "seed": seed, "music_version": music_version,
+		"events": events.duplicate(true),
 		"score": total_score, "daily": is_daily, "date": daily_date}
 	last_song["code"] = NBSongCodec.encode(last_song)
 	store.record_success(song_index, total_score, is_daily, daily_date,
@@ -409,11 +415,12 @@ func _complete_song() -> void:
 func _start_full_playback() -> void:
 	screen = "DROP_SHOW"
 	drop_clock = 0.0
-	audio.configure(genre, bpm, events)
+	audio.configure(genre, bpm, events, music_version, seed)
 
 func _play_saved(song: Dictionary) -> void:
 	genre = int(song.get("genre", 0))
 	bpm = int(song.get("bpm", NBStageDirector.BPMS[genre]))
+	music_version = int(song.get("music_version", 1))
 	seed = int(song.get("seed", 0))
 	events = song.get("events", []).duplicate(true)
 	last_song = song.duplicate(true)
@@ -427,7 +434,7 @@ func _play_saved(song: Dictionary) -> void:
 	drop_clock = 0.0
 	saved_preview = true
 	screen = "PREVIEW"
-	audio.configure(genre, bpm, events)
+	audio.configure(genre, bpm, events, music_version, seed)
 
 func _save_track() -> void:
 	store.save_favorite(last_song)
@@ -443,7 +450,7 @@ func _export_wav() -> void:
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path("user://exports"))
 	var filename := "needlebeat_%d_%d.wav" % [int(last_song.get("genre", 0)), int(last_song.get("seed", 0))]
 	last_export_path = "user://exports/" + filename
-	var ok := audio.export_wav(events, genre, bpm, last_export_path)
+	var ok := audio.export_wav(events, genre, bpm, last_export_path, music_version, seed)
 	_feedback("WAV EXPORTED TO USER DATA" if ok else "WAV EXPORT FAILED", 2.4)
 
 func _draw() -> void:
@@ -595,7 +602,7 @@ func _draw_shooter(palette: Array) -> void:
 	if screen == "FLIGHT":
 		var progress := clampf((stage_clock - flight_start) / NBGeometry.FLIGHT, 0, 1)
 		var flight_radius := INNER_RADIUS if flight_lane == 1 else MAIN_RADIUS
-		head_y = lerpf(LAUNCH_Y - 24, CENTER.y + flight_radius, progress)
+		head_y = lerpf(LAUNCH_Y, CENTER.y + flight_radius, progress)
 	var head := Vector2(CENTER.x, head_y)
 	draw_line(head + Vector2(0, 2), head + Vector2(0, 48), palette[1], 8, true)
 	draw_circle(head, 11.0, palette[2])
@@ -753,7 +760,7 @@ func _draw_library(palette: Array) -> void:
 func _draw_import(palette: Array) -> void:
 	_masthead(palette, "SONG CODE EXCHANGE")
 	_text("IMPORT A RECORD", 31, 254, 33, palette[1])
-	_text("Paste a friend's NBD1 code into the field.", 40, 305, 15, palette[4])
+	_text("Paste a friend's NBD1 or NBD2 code into the field.", 40, 305, 15, palette[4])
 	_text("No account, server, or connection required.", 40, 329, 13, palette[1].darkened(.25))
 	_button(Rect2(40, 439, 400, 66), "PLAY IMPORTED TRACK", palette)
 	_button(Rect2(40, 526, 400, 50), "BACK TO LIBRARY", palette, "secondary")

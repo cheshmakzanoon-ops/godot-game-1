@@ -64,6 +64,7 @@ func _ready() -> void:
 	font = ThemeDB.fallback_font
 	audio = NBAudioSystem.new()
 	add_child(audio)
+	audio.focus_interrupted.connect(_on_android_audio_interrupted)
 	selected_genre = 0
 	audio.set_music_volume(float(store.data["settings"].get("music", 0.8)))
 	import_field = LineEdit.new()
@@ -405,10 +406,21 @@ func _pause_game() -> void:
 func _resume_game() -> void:
 	if screen != "PAUSED":
 		return
+	# A second app may still own the audio output. Keep gameplay paused and
+	# time frozen until Android explicitly grants us audio focus again.
+	if not audio.resume_playback():
+		feedback = "AUDIO BUSY / TAP RESUME TO RETRY"
+		queue_redraw()
+		return
 	stage_origin_usec += Time.get_ticks_usec() - paused_at_usec
 	screen = paused_from
 	recovered_session = false
-	audio.resume_playback()
+
+func _on_android_audio_interrupted(_change: int) -> void:
+	if screen in ["RECORD", "FLIGHT", "FAIL", "ENCORE", "STAGE_CLEAR", "DROP_SHOW", "PREVIEW", "DROP_PAUSE"]:
+		_pause_game()
+	elif screen == "PAUSED":
+		_checkpoint_session()
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_APPLICATION_PAUSED or what == NOTIFICATION_APPLICATION_FOCUS_OUT:

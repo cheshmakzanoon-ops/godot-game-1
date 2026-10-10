@@ -97,6 +97,24 @@ fi
 if grep -Fq 'Fragment shader active uniforms exceed GL_MAX_FRAGMENT_UNIFORM_VECTORS' "$evidence/after_tap_logcat.txt" "$evidence/logcat.txt"; then
   fail 'Android GLES3 canvas shader exceeded emulator GPU uniform limit'
 fi
+# Inject a debug-only transient audio-focus loss in the actual Android
+# runtime. This uses the same callback path as the AudioManager listener.
+adb shell am force-stop "$package"
+adb logcat -c
+adb shell am start -W -a android.intent.action.MAIN -c android.intent.category.LAUNCHER \
+    -p "$package" --es needlebeat.qa audio_focus
+for attempt in $(seq 1 25); do
+  adb logcat -d -t 10000 > "$evidence/audio_focus_logcat.txt" || true
+  if grep -q 'NEEDLEBEAT_QA_FOCUS_RESUMED' "$evidence/audio_focus_logcat.txt"; then break; fi
+  if grep -Eq 'NEEDLEBEAT_QA_FOCUS_.*FAILED|FATAL EXCEPTION|SCRIPT ERROR' "$evidence/audio_focus_logcat.txt"; then
+    fail 'Audio-focus probe crashed or refused a pause/resume transition'
+  fi
+  sleep 2
+done
+for marker in REQUEST_OK PAUSED NO_AUTOPLAY RESUMED; do
+  grep -q "NEEDLEBEAT_QA_FOCUS_$marker" "$evidence/audio_focus_logcat.txt" || fail "Audio focus gate missing $marker"
+done
+
 # Save one real scored pin on Android, then terminate the process.
 adb shell am force-stop "$package"
 adb logcat -c
@@ -129,4 +147,4 @@ adb pull /sdcard/needlebeat_recovered.png "$evidence/recovered.png" >/dev/null
 if [ "$touch_failure" -ne 0 ] || [ "$visual_failure" -ne 0 ]; then
   fail 'Android screen or touch regression; see emulator evidence'
 fi
-echo 'ANDROID_EMULATOR_PASS: launch, touch, PCM WAV, native sharesheet, process-death recovery'
+echo 'ANDROID_EMULATOR_PASS: launch, touch, PCM WAV, native sharesheet, synthetic audio focus, process-death recovery'

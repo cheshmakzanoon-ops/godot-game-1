@@ -60,3 +60,11 @@ Godot 4.7.2 headless import succeeded; 15/15 smoke assertions passed. A nonfatal
 - New automated checks: `tests/checkpoint_flow.gd` (29+ assertions), and an
   Android emulator force-stop / ordinary-relaunch checkpoint probe in
   `tools/android_emulator_smoke.sh`. Physical-device verification still required.
+
+### Audio focus reliability (2026-10-10)
+
+Added native Android AudioFocusRequest/SAM callback bridge with duck/transient/
+permanent focus-loss pause, checkpointed game state, no auto-resume, explicit
+reacquisition, and release of focus on pause/exit. Host+Godot regression suite
+and a debug-only Android emulator focus probe are in CI. Real phone calls,
+headphone unplug/Bluetooth switching and latency require device validation.

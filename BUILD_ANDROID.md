@@ -88,3 +88,13 @@ the package, and launches the normal game. The required log marker is
 `NEEDLEBEAT_QA_SESSION_RESTORED stage=0 placed=1`. Screenshot/PLAY/WAV sharing
 checks are still required independently. Debug-only QA extras are not loaded
 in release builds. See `docs/SESSION_RECOVERY.md` for the schema and failure policy.
+
+## Audio focus interruption QA
+
+The Android debug pipeline runs `tests/audio_focus_flow.gd` and a debug-only
+`needlebeat.qa=audio_focus` intent inside the emulator. The latter requires a
+working Android AudioManager Java interface bridge, checks pause/checkpoint,
+verifies the PCM clock stays still through transient loss, and checks that an
+explicit player resume reacquires focus. It uses Android 15 with the ANGLE
+`swangle` GPU backend. See `docs/AUDIO_FOCUS.md`. Actual cellular call and
+Bluetooth route-change scenarios must still be verified on hardware.

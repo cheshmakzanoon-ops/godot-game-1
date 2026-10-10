@@ -1,6 +1,10 @@
 class_name NBAudioSystem
 extends Node
 
+signal focus_interrupted(change: int)
+
+var focus: NBAndroidAudioFocus
+var focus_blocked := false
 var mixer := NBMusicEngine.new()
 var player: AudioStreamPlayer
 var playback: AudioStreamGeneratorPlayback
@@ -9,6 +13,9 @@ var muted := false
 var paused := false
 
 func _ready() -> void:
+	focus = NBAndroidAudioFocus.new()
+	add_child(focus)
+	focus.focus_lost.connect(_on_focus_interrupted)
 	player = AudioStreamPlayer.new()
 	var generator := AudioStreamGenerator.new()
 	generator.mix_rate = NBMusicEngine.RATE
@@ -27,22 +34,45 @@ func start() -> void:
 	player.play()
 	playback = player.get_stream_playback() as AudioStreamGeneratorPlayback
 	running = playback != null
-	paused = false
+	focus_blocked = not focus.request_focus()
+	paused = focus_blocked
+	player.stream_paused = paused
+	if focus_blocked:
+		call_deferred("_report_denied_focus")
 	_pump()
 
 func stop() -> void:
 	running = false
 	paused = false
+	focus_blocked = false
 	player.stream_paused = false
 	player.stop()
+	focus.abandon_focus()
 
 func pause_playback() -> void:
 	paused = true
 	player.stream_paused = true
+	focus.abandon_focus()
 
-func resume_playback() -> void:
-	player.stream_paused = false
-	paused = false
+func resume_playback() -> bool:
+	if not running:
+		return true # A failed stage has no audio until the next attempt.
+	focus_blocked = not focus.request_focus()
+	paused = focus_blocked
+	player.stream_paused = paused
+	return not focus_blocked
+
+func _on_focus_interrupted(change: int) -> void:
+	if not running:
+		return
+	focus_blocked = true
+	paused = true
+	player.stream_paused = true
+	focus_interrupted.emit(change)
+
+func _report_denied_focus() -> void:
+	if running and focus_blocked:
+		focus_interrupted.emit(NBAndroidAudioFocus.FOCUS_LOSS)
 
 # Recreate the in-flight sequencer position after restoration. Never attempt
 # to buffer minutes of audio just to reach the saved musical transport frame.

@@ -122,3 +122,14 @@ corrupt-primary backup recovery, accurate restored audio PCM, and no score
 duplication. The Android emulator script additionally force-stops the running
 app after a debug-only one-shot checkpoint and checks that an ordinary relaunch
 restores it. See `docs/SESSION_RECOVERY.md`.
+
+## Android audio interruption and manual resume
+
+Android calls, other music apps and system audio-focus interruptions now have
+an explicit `AudioManager` bridge (`scripts/AndroidAudioFocus.gd`). All audio
+focus losses suspend the song and persist unfinished records; focus gain never
+starts playing behind an interruption screen. Tap **RESUME** after the phone
+returns to normal. Pausing or leaving a record releases audio focus for other
+apps. This is tested with a synthetic Android callback and headless Godot
+checks; see `docs/AUDIO_FOCUS.md`. A real phone-call and Bluetooth test is still
+required on physical hardware.

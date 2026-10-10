@@ -25,6 +25,8 @@ jobs:
         run: godot --headless --path . --script res://tests/full_flow.gd
       - name: Android process-death checkpoints and sample-accurate audio
         run: godot --headless --path . --script res://tests/checkpoint_flow.gd
+      - name: Android audio-focus interruption and lifecycle regressions
+        run: godot --headless --path . --script res://tests/audio_focus_flow.gd
 
   android-debug:
     needs: game-test

@@ -7,6 +7,7 @@ extends Node
 const EXTRA := "needlebeat.qa"
 const COMMAND := "wav_share"
 const CHECKPOINT_COMMAND := "checkpoint_seed"
+const FOCUS_COMMAND := "audio_focus"
 const PROBE_WAV := "user://exports/needlebeat_qa_smoke.wav"
 
 func _ready() -> void:
@@ -28,6 +29,8 @@ func _ready() -> void:
 		call_deferred("_test_wav_share")
 	elif instruction == CHECKPOINT_COMMAND:
 		call_deferred("_seed_recovery_checkpoint")
+	elif instruction == FOCUS_COMMAND:
+		call_deferred("_test_audio_focus")
 
 func _test_wav_share() -> void:
 	var parent = get_parent()
@@ -90,3 +93,40 @@ func _seed_recovery_checkpoint() -> void:
 		printerr("NEEDLEBEAT_QA_CHECKPOINT_NOT_DURABLE")
 		return
 	print("NEEDLEBEAT_QA_CHECKPOINT_SAVED stage=0 placed=1")
+
+# Debug-only synthetic Android audio-focus loss. Tests the real callback path
+# but does not masquerade as a phone call or Bluetooth route change.
+func _test_audio_focus() -> void:
+	var game = get_parent()
+	if game == null or game.audio == null:
+		printerr("NEEDLEBEAT_QA_FOCUS_NO_GAME")
+		return
+	game.call("_open_menu")
+	game.call("_start_song", false)
+	if not game.audio.focus.supported:
+		printerr("NEEDLEBEAT_QA_FOCUS_BRIDGE_FAILED")
+		return
+	if game.screen != "RECORD" or not game.audio.focus.requested:
+		printerr("NEEDLEBEAT_QA_FOCUS_REQUEST_FAILED")
+		return
+	print("NEEDLEBEAT_QA_FOCUS_REQUEST_OK")
+	game.audio.focus._apply_focus_change(NBAndroidAudioFocus.FOCUS_LOSS_TRANSIENT)
+	if game.screen != "PAUSED" or not game.audio.paused or game.audio.focus.requested:
+		printerr("NEEDLEBEAT_QA_FOCUS_PAUSE_FAILED")
+		return
+	var frozen: int = game.audio.mixer.frame
+	await get_tree().create_timer(0.35).timeout
+	if game.audio.mixer.frame != frozen:
+		printerr("NEEDLEBEAT_QA_FOCUS_CLOCK_FAILED")
+		return
+	print("NEEDLEBEAT_QA_FOCUS_PAUSED")
+	game.audio.focus._apply_focus_change(NBAndroidAudioFocus.FOCUS_GAIN)
+	if game.screen != "PAUSED":
+		printerr("NEEDLEBEAT_QA_FOCUS_AUTOPLAY_FAILED")
+		return
+	print("NEEDLEBEAT_QA_FOCUS_NO_AUTOPLAY")
+	game.call("_resume_game")
+	if game.screen != "RECORD" or game.audio.paused or not game.audio.focus.requested:
+		printerr("NEEDLEBEAT_QA_FOCUS_RESUME_FAILED")
+		return
+	print("NEEDLEBEAT_QA_FOCUS_RESUMED")

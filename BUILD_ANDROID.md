@@ -60,7 +60,7 @@ Android device testing remains outstanding until an actual device is used.
 
 ## Android emulator runtime gate
 
-The `android-emulator` GitHub Actions job runs on an API 35 x86_64 emulator. The
+The `android-emulator` GitHub Actions job runs on an API 34 x86_64 AOSP emulator. The
 shipping ARM64 debug artifact is unchanged. CI exports a separate x86_64-only
 APK, installs and launches it, taps PLAY, verifies screenshots are distinct,
 then launches a **debug-only** test intent with `needlebeat.qa=wav_share`. The

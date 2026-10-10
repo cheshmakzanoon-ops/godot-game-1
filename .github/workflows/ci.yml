@@ -107,10 +107,12 @@ jobs:
       - name: Install, launch, tap, export WAV and check sharesheet
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 35
-          target: google_apis
+          api-level: 34
+          target: default
           arch: x86_64
-          profile: pixel_6
+          profile: pixel_4
+          cores: 4
+          ram-size: 3072M
           disable-animations: true
           emulator-options: -no-snapshot -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           script: bash tools/android_emulator_smoke.sh

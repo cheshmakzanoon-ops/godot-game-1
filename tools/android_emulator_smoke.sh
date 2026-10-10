@@ -29,7 +29,11 @@ adb shell input tap 240 720
 sleep 5
 adb shell pidof "$package" >/dev/null || fail 'the game crashed after a touch event'
 adb logcat -d -t 5000 > "$evidence/after_tap_logcat.txt"
-grep -q 'NEEDLEBEAT_QA_PLAY_STARTED' "$evidence/after_tap_logcat.txt" || fail 'the PLAY tap did not start a record'
+touch_failure=0
+if ! grep -q 'NEEDLEBEAT_QA_PLAY_STARTED' "$evidence/after_tap_logcat.txt"; then
+  touch_failure=1
+  echo 'TOUCH_INCONCLUSIVE: PLAY event absent or blocked by Android system dialog' | tee "$evidence/touch_warning.txt"
+fi
 adb shell screencap -p /sdcard/needlebeat_play.png
 adb pull /sdcard/needlebeat_play.png "$evidence/play.png" >/dev/null
 visual_failure=0
@@ -68,7 +72,7 @@ fi
 if grep -Eiq 'FATAL EXCEPTION|AndroidRuntime.*FATAL|NEEDLEBEAT_QA_SHARE_FAILED' "$evidence/logcat.txt"; then
   fail 'Uncaught Android error detected'
 fi
-if [ "$visual_failure" -ne 0 ]; then
-  fail 'Godot rendered surface could not be verified even though touch worked'
+if [ "$touch_failure" -ne 0 ] || [ "$visual_failure" -ne 0 ]; then
+  fail 'Android screen or touch regression; see emulator evidence'
 fi
 echo 'ANDROID_EMULATOR_PASS: launch, touch, PCM WAV, native sharesheet'

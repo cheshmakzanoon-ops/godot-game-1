@@ -33,3 +33,26 @@ Place the project folder at the root of a GitHub repository. On push or via `wor
 The Play Store requires a signed release **AAB**, not an unsigned or debug APK. Enable **Gradle Build** in the Android export preset, install the Android build template, configure a securely stored release signing key, update version code and package identity, and use `--export-release` to generate an `.aab`. Do not place keystore passwords in the repo. Complete Android audio-focus, haptic, permission, thermal, accessibility, crash, privacy, and Play policy tests before production rollout.
 
 The game itself is designed for offline play, does not need microphone permission, and does not make network calls. Android share chooser for **text** is implemented via the built-in `AndroidRuntime` bridge; third-party WAV sharing via secure `content://` URI is pending.
+
+## Native WAV sharing (new)
+
+This Android export now requires a **Gradle build** so it can compile a tiny Java
+`FileProvider` bridge. After installing the Android SDK and Godot export templates:
+
+```bash
+godot --headless --editor --path . --install-android-build-template --quit
+python tools/prepare_android_share.py
+godot --headless --path . --export-debug Android build/NEEDLEBEAT_DROP-debug.apk
+```
+
+`tools/prepare_android_share.py` is idempotent. It injects the bridge source,
+AndroidX core dependency and provider declaration into the generated (gitignored)
+`android/build/` folder. It must be rerun whenever the template is regenerated.
+The provider can grant read access **only** to audio copied into
+`cache/shared_audio/`; exported WAVs remain in `user://exports/`.
+There is no microphone, external-storage or broad file permission.
+
+**Device acceptance:** Complete a song, select **EXPORT / SHARE WAV**, choose
+a mail/chat/file app, verify the recipient can play the stereo four-bar WAV,
+and retry with no matching share app. Test background/resume and Android 10+.
+Those on-device checks have not yet been performed.

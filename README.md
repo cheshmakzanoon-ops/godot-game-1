@@ -91,3 +91,17 @@ Refer to `BUILD_ANDROID.md`. For local device installs, use the Android **debug*
 ## License and content
 
 All audio samples and the icon in this project were generated from the included scripts. No external copyrighted recordings are bundled. The original GDD is provided by the project owner. Source may be revised or commercially licensed by the project owner after review.
+
+### Sharing the actual WAV on Android
+
+The results screen's **EXPORT / SHARE WAV** control renders a full stereo
+four-bar RIFF WAV and opens the system audio share sheet on Android. The
+Android Gradle build includes a small, auditable Java bridge backed by
+`androidx.core.content.FileProvider`. Only the generated audio in the
+app's dedicated temporary `cache/shared_audio/` directory is exposed via
+a one-time `content://` grant to the chosen app. No internet, storage
+permission, microphone or account is required.
+
+See `BUILD_ANDROID.md` for the Gradle template overlay step. On desktop,
+export saves to the Godot user-data directory. A real Android handset
+still needs to verify chooser delivery, WAV decoding and recipient access.

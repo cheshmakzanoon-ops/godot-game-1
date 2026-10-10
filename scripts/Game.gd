@@ -451,7 +451,13 @@ func _export_wav() -> void:
 	var filename := "needlebeat_%d_%d.wav" % [int(last_song.get("genre", 0)), int(last_song.get("seed", 0))]
 	last_export_path = "user://exports/" + filename
 	var ok := audio.export_wav(events, genre, bpm, last_export_path, music_version, seed)
-	_feedback("WAV EXPORTED TO USER DATA" if ok else "WAV EXPORT FAILED", 2.4)
+	if not ok:
+		_feedback("WAV EXPORT FAILED", 2.4)
+	elif OS.get_name() == "Android":
+		_feedback("CHOOSE AN APP TO SHARE" if NBAndroidShare.share_wav(last_export_path)
+			else "WAV SAVED / SHARING UNAVAILABLE", 2.4)
+	else:
+		_feedback("WAV EXPORTED TO USER DATA", 2.4)
 
 func _draw() -> void:
 	if adapt_scale <= 0.0:
@@ -722,7 +728,7 @@ func _draw_results(palette: Array) -> void:
 	_text(NBStageDirector.GENRES[genre] + "   /   " + str(bpm) + " BPM", 51, 500, 14, palette[4])
 	_button(Rect2(40, 536, 400, 50), "SAVE TO LIBRARY", palette)
 	_button(Rect2(40, 591, 400, 50), "SHARE / COPY SONG CODE", palette, "secondary")
-	_button(Rect2(40, 646, 400, 50), "EXPORT AUDIO (.WAV)", palette, "secondary")
+	_button(Rect2(40, 646, 400, 50), "EXPORT / SHARE WAV", palette, "secondary")
 	_button(Rect2(40, 705, 400, 60), "NEW TRACK" if not is_daily else "RETRY DAILY", palette)
 	_button(Rect2(40, 777, 400, 45), "MAIN MENU", palette, "secondary")
 

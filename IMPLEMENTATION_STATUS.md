@@ -34,3 +34,11 @@ Godot 4.7.2 headless import succeeded; 15/15 smoke assertions passed. A nonfatal
 - New music grammar uses seed-selected genre progressions, consistent triad qualities and chord-tone downbeats. All previously shared NBD1 codes preserve their original timbre and arrangement (8192-frame golden PCM SHA-256 regression).
 - Song codes now normalize numeric event types when imported; supports NBD1 and NBD2. A code checksum never replaces input validation.
 - Live Android rendering/touch/audio focus and WAV share chooser/FileProvider remain release blockers.
+
+### Native audio sharing milestone (October 2026)
+- GDScript WAV-export action now invokes `NBAndroidShare.share_wav` on Android.
+- Android Gradle template overlay uses an exported=false `FileProvider`, cache-only
+  file mapping, temporary content URI read grants, and native ACTION_SEND chooser.
+- Desktop still stores the WAV under user data; file sharing is not attempted there.
+- CI now installs the Gradle template and validates that the Android bridge is packaged.
+- Physical-device intent delivery/playback still requires a hardware test.

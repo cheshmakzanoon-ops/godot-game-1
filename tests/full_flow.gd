@@ -215,11 +215,30 @@ func run_music() -> void:
 	check(NBMusicEngine.chord_at(0, 1, 0) != NBMusicEngine.chord_at(0, 1, 1),
 		"different seeds select different curated progressions")
 
+func run_export_audio() -> void:
+	if OS.get_name() == "Android":
+		return
+	var game := create_game()
+	game.call("_start_song", false)
+	game.call("_complete_song")
+	game.screen = "RESULTS"
+	game.call("_export_wav")
+	check(game.feedback == "WAV EXPORTED TO USER DATA", "desktop WAV export stays functional")
+	check(FileAccess.file_exists(game.last_export_path), "exported WAV exists in user data")
+	var file := FileAccess.open(game.last_export_path, FileAccess.READ)
+	if file != null:
+		check(file.get_buffer(4).get_string_from_ascii() == "RIFF", "share export has WAV RIFF signature")
+		file.close()
+	check(not NBAndroidShare.share_wav(game.last_export_path),
+		"desktop does not attempt Android FileProvider sharing")
+	game.free()
+
 func run_checks() -> void:
 	run_music()
 	run_campaign()
 	run_encore()
 	run_specials()
+	run_export_audio()
 	call_deferred("finish")
 
 func finish() -> void:

@@ -61,6 +61,9 @@ func run_checks() -> void:
 		root.add_child(game)
 		game.call("_start_song", false)
 		verify(str(game.get("screen")) == "RECORD" and int(game.get("stage_index")) == 0, "playable game enters first record")
+		var effective: Vector2 = game.call("_effective_canvas_size", Vector2.ZERO)
+		verify(effective.x > 0.0 and effective.y > 0.0,
+			"zero-sized root falls back to positive viewport bounds")
 		game.call("_open_menu")
 		game.queue_free()
 	print("SMOKE TESTS: %d failure(s)" % failures)

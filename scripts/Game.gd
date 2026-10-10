@@ -80,9 +80,16 @@ func _ready() -> void:
 		var qa_probe = load("res://tests/android_runtime.gd").new()
 		add_child(qa_probe)
 
+func _effective_canvas_size(control_size: Vector2) -> Vector2:
+	# Android can initially report zero-sized anchored Control bounds.
+	if control_size.x <= 1.0 or control_size.y <= 1.0:
+		return get_viewport_rect().size
+	return control_size
+
 func _refresh_layout() -> void:
-	adapt_scale = minf(size.x / WIDTH, size.y / HEIGHT)
-	adapt_offset = (size - Vector2(WIDTH, HEIGHT) * adapt_scale) * 0.5
+	var canvas_size := _effective_canvas_size(size)
+	adapt_scale = minf(canvas_size.x / WIDTH, canvas_size.y / HEIGHT)
+	adapt_offset = (canvas_size - Vector2(WIDTH, HEIGHT) * adapt_scale) * 0.5
 	if import_field != null:
 		import_field.position = adapt_offset + Vector2(40, 353) * adapt_scale
 		import_field.size = Vector2(400, 47) * adapt_scale
@@ -268,7 +275,8 @@ func _open_menu() -> void:
 
 func _start_song(daily: bool) -> void:
 	if OS.get_name() == "Android" and OS.has_feature("debug"):
-		print("NEEDLEBEAT_QA_PLAY_STARTED")
+		print("NEEDLEBEAT_QA_PLAY_STARTED size=", size, " viewport=", get_viewport_rect().size,
+			" scale=", adapt_scale)
 	is_daily = daily
 	daily_date = NBStageDirector.daily_date() if daily else ""
 	song_index = int(store.data["campaign_index"])

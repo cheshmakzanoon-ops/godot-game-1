@@ -12,11 +12,16 @@ adb shell getprop sys.boot_completed | tr -d '\r' | grep -qx '1' || fail 'emulat
 adb install -r "$apk" || fail 'failed to install x86_64 debug APK'
 adb shell wm size 480x854
 adb shell wm density 240
+# Avoid Android's first-run fullscreen tutorial obscuring the game UI.
+adb shell settings put secure immersive_mode_confirmations confirmed || true
 adb logcat -c
 
 # The first start must render the menu and accept the large one-thumb PLAY target.
 adb shell am start -W -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -p "$package"
 sleep 12
+# Fallback for emulator images that ignore the secure setting.
+adb shell input tap 390 353
+sleep 2
 adb shell pidof "$package" >/dev/null || fail 'the game crashed during launch'
 adb shell screencap -p /sdcard/needlebeat_menu.png
 adb pull /sdcard/needlebeat_menu.png "$evidence/menu.png" >/dev/null

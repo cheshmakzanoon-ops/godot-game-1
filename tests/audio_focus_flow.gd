@@ -54,7 +54,6 @@ func run_checks() -> void:
 	var record_index: int = game.stage_index
 	var before_score: int = game.total_score
 	var before_pins: int = game.pins.size()
-	var previous_frame: int = game.audio.mixer.frame
 	game.audio.focus._apply_focus_change(NBAndroidAudioFocus.FOCUS_LOSS_TRANSIENT)
 	verify(game.screen == "PAUSED" and game.paused_from == "RECORD",
 		"transient audio interruption pauses the visible game")
@@ -62,8 +61,10 @@ func run_checks() -> void:
 		"interrupted transport is suspended and voluntarily abandons its focus")
 	verify(game.store.data["active_song"].get("screen", "") == "RECORD",
 		"interrupted record retains a recovery checkpoint")
+	var previous_frame: int = game.audio.rendered_frames()
+	OS.delay_msec(20)
 	game.audio._pump()
-	verify(game.audio.mixer.frame == previous_frame,
+	verify(game.audio.rendered_frames() == previous_frame,
 		"backgrounded audio mixer produces no additional PCM frames")
 	game.audio.focus._apply_focus_change(NBAndroidAudioFocus.FOCUS_GAIN)
 	verify(game.screen == "PAUSED", "late focus gain never auto-plays without player consent")
@@ -96,4 +97,5 @@ func run_checks() -> void:
 	game.queue_free()
 	controller.queue_free()
 	print("AUDIO FOCUS FLOW: %d assertions, %d failures" % [checks, failures])
+	await create_timer(0.5).timeout # Drain native audio references before process teardown.
 	quit(0 if failures == 0 else 1)

@@ -7,7 +7,7 @@ const DURATION := 40.0
 const WARMUP := 3.0
 const MAX_P95_FRAME_MS := 250.0 # Headless software GPU safeguard, not the phone's 60fps target.
 const MAX_MEMORY_GROWTH := 24 * 1024 * 1024
-const MAX_UNDERRUNS := 100 # Count of underrun events, not skipped sample frames.
+const MAX_UNDERRUNS := 5 # Count of underrun events, not skipped sample frames.
 
 var game: Node
 var running := false
@@ -18,6 +18,7 @@ var frame_ms: Array[float] = []
 var memory_start := 0
 var audio_start := 0
 var skipped_start := 0
+var measurement_usec := 0
 
 func _ready() -> void:
 	call_deferred("_begin")
@@ -66,14 +67,15 @@ func _process(_delta: float) -> void:
 	var elapsed := float(now - started_usec) / 1000000.0
 	if elapsed >= WARMUP:
 		if memory_start == 0:
+			measurement_usec = now
 			memory_start = OS.get_static_memory_usage()
-			audio_start = game.audio.mixer.frame
+			audio_start = game.audio.rendered_frames()
 			skipped_start = game.audio.playback.get_skips()
 		if last_frame_usec != 0:
 			frame_ms.append(float(now - last_frame_usec) / 1000.0)
 	last_frame_usec = now
 	if elapsed >= next_report:
-		print("NEEDLEBEAT_QA_PERF_TICK sec=", roundi(elapsed), " mixer_frame=", game.audio.mixer.frame)
+		print("NEEDLEBEAT_QA_PERF_TICK sec=", roundi(elapsed), " mixer_frame=", game.audio.rendered_frames())
 		next_report += 10.0
 	if elapsed >= DURATION + WARMUP:
 		_finish()
@@ -84,14 +86,17 @@ func _finish() -> void:
 	var p95 := 0.0
 	if not frame_ms.is_empty():
 		p95 = frame_ms[clampi(ceili(float(frame_ms.size()) * 0.95) - 1, 0, frame_ms.size() - 1)]
-	var actual_audio_frames := maxi(0, game.audio.mixer.frame - audio_start)
-	var expected_frames := DURATION * float(NBMusicEngine.RATE)
+	var actual_audio_frames := maxi(0, game.audio.rendered_frames() - audio_start)
+	var measured_seconds := float(Time.get_ticks_usec() - measurement_usec) / 1000000.0
+	var expected_frames := measured_seconds * float(NBMusicEngine.RATE)
 	var audio_ratio := float(actual_audio_frames) / expected_frames
 	var skips := maxi(0, game.audio.playback.get_skips() - skipped_start)
 	var memory_growth := OS.get_static_memory_usage() - memory_start
 	print("NEEDLEBEAT_QA_PERF_METRICS p95_ms=%.2f frames=%d audio_ratio=%.4f skips=%d memory_delta=%d" %
 		[p95, frame_ms.size(), audio_ratio, skips, memory_growth])
-	if frame_ms.size() < 150:
+	if not game.audio.worker_active():
+		_fail_after("audio-worker-inactive")
+	elif frame_ms.size() < 150:
 		_fail_after("insufficient-render-frames")
 	elif p95 > MAX_P95_FRAME_MS:
 		_fail_after("slow-software-renderer")

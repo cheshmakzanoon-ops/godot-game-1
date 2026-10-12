@@ -58,19 +58,29 @@ def launch():
 
 
 def choose():
-    for attempt in range(5):
-        adb("shell", "uiautomator", "dump", "/sdcard/nb_receiver.xml")
-        xml = adb("shell", "cat", "/sdcard/nb_receiver.xml")
+    # Android may return exit 0 with "null root" while the chooser is opening.
+    # Retry missing/partial snapshots; never accept stale XML or guess an app tap.
+    remote = "/data/local/tmp/nb_receiver.xml"
+    for attempt in range(12):
+        time.sleep(2)
+        try:
+            adb("shell", "rm", "-f", remote)
+            output = adb("shell", "uiautomator", "dump", "--compressed", remote)
+            (EVIDENCE / f"receiver-dump-{attempt}.txt").write_text(output)
+            xml = adb("shell", "cat", remote)
+            ET.fromstring(xml)  # A partial hierarchy is not evidence of a missing app.
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, ET.ParseError) as error:
+            (EVIDENCE / f"receiver-dump-{attempt}.txt").write_text(str(error))
+            continue
         (EVIDENCE / "receiver-chooser.xml").write_text(xml)
         try:
             x, y = target_point(xml)
             adb("shell", "input", "tap", x, y)
             return
         except ValueError:
-            # Expand a collapsed sharesheet, not blind coordinates for an app.
+            # Expand only after reading a valid hierarchy without our label.
             adb("shell", "input", "swipe", "240", "750", "240", "300", "300")
-            time.sleep(1)
-    raise AssertionError("No visible QA recipient after expanding chooser")
+    raise AssertionError("No visible QA recipient after bounded chooser retries")
 
 
 def run():
@@ -104,5 +114,15 @@ if __name__ == "__main__":
         run()
     except Exception:
         EVIDENCE.mkdir(parents=True, exist_ok=True)
-        (EVIDENCE / "receiver-failure.log").write_text(adb("logcat", "-d", "-t", "20000"))
+        for name, args, binary in [
+            ("receiver-failure.log", ("logcat", "-d", "-t", "20000"), False),
+            ("receiver-failure-window.txt", ("shell", "dumpsys", "window"), False),
+            ("receiver-failure.png", ("exec-out", "screencap", "-p"), True),
+        ]:
+            try:
+                result = adb(*args, binary=binary)
+                path = EVIDENCE / name
+                path.write_bytes(result) if binary else path.write_text(result)
+            except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+                pass  # Keep the original diagnostic exception.
         raise

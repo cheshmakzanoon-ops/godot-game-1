@@ -1,6 +1,9 @@
 """Host validation of the cross-UID Android acceptance gate's evidence checks."""
 import importlib.util
 import unittest
+from unittest.mock import patch
+import tempfile
+import subprocess
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
@@ -43,3 +46,35 @@ class RecipientTests(unittest.TestCase):
         for operation in ("openInputStream(uri)", "openOutputStream(uri", "openInputStream(sibling)",
                           "decoder.prepare()", "MessageDigest.getInstance(\"SHA-256\")"):
             self.assertIn(operation, source)
+
+    def test_chooser_retries_missing_snapshot_then_uses_real_bounds(self):
+        xml = '<hierarchy><node text="NB WAV verifier" bounds="[10,40][90,100]"/></hierarchy>'
+        reads = []
+        taps = []
+        def fake_adb(*args, **_kwargs):
+            if args[:2] == ("shell", "cat"):
+                reads.append(1)
+                if len(reads) == 1:
+                    raise subprocess.CalledProcessError(1, ["adb", *args])
+                return xml
+            if args[:3] == ("shell", "input", "tap"):
+                taps.append(args[3:])
+            return ""
+        with tempfile.TemporaryDirectory() as folder, \
+             patch.object(recipient, "EVIDENCE", Path(folder)), \
+             patch.object(recipient, "adb", side_effect=fake_adb), \
+             patch.object(recipient.time, "sleep"):
+            recipient.choose()
+        self.assertEqual(len(reads), 2)
+        self.assertEqual(taps, [("50", "70")])
+
+    def test_chooser_missing_hierarchy_never_passes(self):
+        def fake_adb(*args, **_kwargs):
+            if args[:2] == ("shell", "cat"):
+                raise subprocess.CalledProcessError(1, ["adb", *args])
+            return ""
+        with tempfile.TemporaryDirectory() as folder, \
+             patch.object(recipient, "EVIDENCE", Path(folder)), \
+             patch.object(recipient, "adb", side_effect=fake_adb), \
+             patch.object(recipient.time, "sleep"), self.assertRaises(AssertionError):
+            recipient.choose()

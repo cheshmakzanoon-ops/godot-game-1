@@ -3,11 +3,28 @@ on:
   push:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   game-test:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+      - name: Archive exact committed source
+        run: |
+          mkdir -p build
+          git archive --format=zip --output=build/NEEDLEBEAT_DROP_Source.zip HEAD
+          git rev-parse HEAD > build/SOURCE_COMMIT.txt
+      - name: Upload source snapshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: NEEDLEBEAT_DROP_Source_Snapshot
+          path: |
+            build/NEEDLEBEAT_DROP_Source.zip
+            build/SOURCE_COMMIT.txt
+          if-no-files-found: error
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -18,22 +35,29 @@ jobs:
           use-dotnet: false
           include-templates: true
       - name: Import resources and check GDScript syntax
-        run: godot --headless --editor --path . --import --quit
+        run: timeout 120 godot --headless --editor --path . --import --quit
       - name: Engine-integrated gameplay and WAV smoke tests
-        run: godot --headless --path . --script res://tests/smoke.gd
+        run: timeout 90 godot --headless --path . --script res://tests/smoke.gd
       - name: Deterministic four-record / music regression tests
-        run: godot --headless --path . --script res://tests/full_flow.gd
+        run: timeout 120 godot --headless --path . --script res://tests/full_flow.gd
       - name: Android process-death checkpoints and sample-accurate audio
-        run: godot --headless --path . --script res://tests/checkpoint_flow.gd
+        run: timeout 120 godot --headless --path . --script res://tests/checkpoint_flow.gd
       - name: Android audio-focus interruption and lifecycle regressions
-        run: godot --headless --path . --script res://tests/audio_focus_flow.gd
+        run: timeout 90 godot --headless --path . --script res://tests/audio_focus_flow.gd
+      - name: PCM worker survives render stalls and thread churn
+        run: timeout 90 godot --headless --path . --script res://tests/audio_worker.gd
+      - name: Atomic saves and hostile composition parser inputs
+        run: timeout 90 godot --headless --path . --script res://tests/storage_safety.gd
+      - name: Replay, library hit regions, touch and settings
+        run: timeout 90 godot --headless --path . --script res://tests/player_flow.gd
       - name: Ten-minute deterministic audio/memory/CPU soak
         timeout-minutes: 3
-        run: godot --headless --path . --script res://tests/audio_soak.gd
+        run: timeout 150 godot --headless --path . --script res://tests/audio_soak.gd
 
   android-debug:
     needs: game-test
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -79,8 +103,10 @@ jobs:
       - name: Verify Android debug APK signature and package
         run: |
           "$ANDROID_HOME/build-tools/35.0.1/apksigner" verify --verbose --print-certs build/NEEDLEBEAT_DROP-debug.apk
-          "$ANDROID_HOME/build-tools/35.0.1/aapt" dump badging build/NEEDLEBEAT_DROP-debug.apk | head -12
-          "$ANDROID_HOME/build-tools/35.0.1/aapt" dump xmltree build/NEEDLEBEAT_DROP-debug.apk AndroidManifest.xml | grep -q 'FileProvider'
+          "$ANDROID_HOME/build-tools/35.0.1/aapt" dump badging build/NEEDLEBEAT_DROP-debug.apk > build/apk-badging.txt
+          head -12 build/apk-badging.txt
+          "$ANDROID_HOME/build-tools/35.0.1/aapt" dump xmltree build/NEEDLEBEAT_DROP-debug.apk AndroidManifest.xml > build/apk-manifest.txt
+          grep -q 'FileProvider' build/apk-manifest.txt
       - uses: actions/upload-artifact@v4
         with:
           name: NEEDLEBEAT_DROP_Android_ARM64_Debug

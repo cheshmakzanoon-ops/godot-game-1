@@ -52,6 +52,8 @@ jobs:
         run: bash tools/run_godot_test.sh res://tests/player_flow.gd
       - name: Native Back and window-close recovery
         run: bash tools/run_godot_test.sh res://tests/native_navigation.gd
+      - name: Immutable shared WAVs and failed export preservation
+        run: bash tools/run_godot_test.sh res://tests/wav_integrity.gd
       - name: Ten-minute deterministic audio/memory/CPU soak
         timeout-minutes: 3
         run: bash tools/run_godot_test.sh res://tests/audio_soak.gd
@@ -106,6 +108,13 @@ jobs:
           export/android/debug_keystore_user = "androiddebugkey"
           export/android/debug_keystore_pass = "android"
           EOF
+      - name: Build permission-free receiving-app fixture
+        run: bash tools/build_wav_receiver.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NEEDLEBEAT_DROP_WAV_Receiver_QA
+          path: build/NEEDLEBEAT_WAV_Verifier.apk
+          if-no-files-found: error
       - name: Export ARM64 debug APK
         run: |
           mkdir -p build
@@ -143,6 +152,10 @@ jobs:
         with:
           name: NEEDLEBEAT_DROP_Android_x86_64_Debug
           path: build
+      - uses: actions/download-artifact@v4
+        with:
+          name: NEEDLEBEAT_DROP_WAV_Receiver_QA
+          path: build
       - name: Enable KVM acceleration
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
@@ -159,7 +172,7 @@ jobs:
           ram-size: 3072M
           disable-animations: true
           emulator-options: -no-snapshot -no-window -gpu swangle -noaudio -no-boot-anim -camera-back none
-          script: bash tools/android_emulator_smoke.sh && bash tools/android_native_back.sh
+          script: bash tools/android_emulator_smoke.sh && bash tools/android_native_back.sh && python3 tools/android_share_receiver.py
       - name: Upload emulator diagnostics
         if: always()
         uses: actions/upload-artifact@v4

@@ -6,6 +6,7 @@ extends Node
 # An ordinary player launch, or any release build, never runs this probe.
 const EXTRA := "needlebeat.qa"
 const COMMAND := "wav_share"
+const RECEIVER_COMMAND := "receiver_share"
 const CHECKPOINT_COMMAND := "checkpoint_seed"
 const FOCUS_COMMAND := "audio_focus"
 const PERF_COMMAND := "performance_soak"
@@ -28,6 +29,8 @@ func _ready() -> void:
 	var instruction := str(intent.getStringExtra(EXTRA))
 	if instruction == COMMAND:
 		call_deferred("_test_wav_share")
+	elif instruction == RECEIVER_COMMAND:
+		call_deferred("_test_wav_share", true)
 	elif instruction == CHECKPOINT_COMMAND:
 		call_deferred("_seed_recovery_checkpoint")
 	elif instruction == FOCUS_COMMAND:
@@ -35,7 +38,7 @@ func _ready() -> void:
 	elif instruction == PERF_COMMAND:
 		call_deferred("_start_performance_soak")
 
-func _test_wav_share() -> void:
+func _test_wav_share(change_origin: bool = false) -> void:
 	var parent = get_parent()
 	if parent == null or parent.audio == null:
 		printerr("NEEDLEBEAT_QA_AUDIO_UNAVAILABLE")
@@ -57,9 +60,26 @@ func _test_wav_share() -> void:
 	if bytes.size() < 44 or bytes.slice(0, 4).get_string_from_ascii() != "RIFF" or bytes.slice(8, 12).get_string_from_ascii() != "WAVE":
 		printerr("NEEDLEBEAT_QA_WAV_INVALID")
 		return
+	# Harmless unshared sibling proves that the recipient gets one-file access only.
+	var private_file := FileAccess.open("user://exports/needlebeat_qa_private.txt", FileAccess.WRITE)
+	if private_file == null:
+		printerr("NEEDLEBEAT_QA_PRIVATE_FIXTURE_FAILED")
+		return
+	private_file.store_string("Unshared QA fixture; not player data.")
+	private_file.close()
+	print("NEEDLEBEAT_QA_PRIVATE_FIXTURE_OK")
+	print("NEEDLEBEAT_QA_EXPORT_SHA256=", FileAccess.get_sha256(PROBE_WAV))
 	print("NEEDLEBEAT_QA_EXPORT_OK size=", bytes.size())
 	if NBAndroidShare.share_wav(PROBE_WAV):
 		print("NEEDLEBEAT_QA_SHARE_REQUESTED")
+		if change_origin:
+			var original := FileAccess.open(PROBE_WAV, FileAccess.WRITE)
+			if original == null:
+				printerr("NEEDLEBEAT_QA_ORIGIN_CHANGE_FAILED")
+				return
+			original.store_string("QA source replaced after immutable sharing snapshot.")
+			original.close()
+			print("NEEDLEBEAT_QA_ORIGIN_CHANGED")
 	else:
 		printerr("NEEDLEBEAT_QA_SHARE_FAILED")
 

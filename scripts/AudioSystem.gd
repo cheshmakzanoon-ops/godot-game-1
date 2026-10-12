@@ -225,7 +225,8 @@ func export_wav(events: Array, genre: int, bpm: int, out_path: String, music_ver
 	var renderer := NBMusicEngine.new()
 	renderer.setup(genre, bpm, events, music_version, song_seed)
 	var total := renderer.get_loop_frame_count()
-	var f := FileAccess.open(out_path, FileAccess.WRITE)
+	var temporary := out_path + ".tmp"
+	var f := FileAccess.open(temporary, FileAccess.WRITE)
 	if f == null:
 		return false
 	# Standard PCM RIFF, 16-bit, stereo, 22,050Hz.
@@ -251,5 +252,11 @@ func export_wav(events: Array, genre: int, bpm: int, out_path: String, music_ver
 			bytes.encode_s16(i * 4 + 2, clampi(roundi(frames[i].y * 32767.0), -32768, 32767))
 		f.store_buffer(bytes)
 		remaining -= frames.size()
+	f.flush()
+	var error := f.get_error()
 	f.close()
-	return true
+	if error == OK and FileAccess.get_file_as_bytes(temporary).size() == 44 + total * 4:
+		if DirAccess.rename_absolute(ProjectSettings.globalize_path(temporary), ProjectSettings.globalize_path(out_path)) == OK:
+			return true
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(temporary))
+	return false

@@ -23,6 +23,29 @@ static func share_code(code: String, context: String = "") -> bool:
 	activity.runOnUiThread(runtime.createRunnableFromGodotCallable(share_task))
 	return true
 
+# A shared URI must keep referring to the same bytes after another export.
+# The full PCM hash gives each distinct arrangement its own private snapshot.
+static func archive_wav(path: String) -> String:
+	if not path.begins_with("user://exports/") or path.simplify_path() != path:
+		return ""
+	if path.trim_prefix("user://exports/").contains("/") or not path.get_file().begins_with("needlebeat_") or path.get_extension().to_lower() != "wav":
+		return ""
+	if not FileAccess.file_exists(path):
+		return ""
+	var digest := FileAccess.get_sha256(path)
+	if digest.length() != 64:
+		return ""
+	var archived := "user://exports/needlebeat_shared_" + digest + ".wav"
+	if FileAccess.file_exists(archived) and FileAccess.get_sha256(archived) == digest:
+		return archived
+	var temporary := archived + ".tmp"
+	var result := DirAccess.copy_absolute(ProjectSettings.globalize_path(path), ProjectSettings.globalize_path(temporary))
+	if result == OK and FileAccess.get_sha256(temporary) == digest:
+		if DirAccess.rename_absolute(ProjectSettings.globalize_path(temporary), ProjectSettings.globalize_path(archived)) == OK:
+			return archived
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(temporary))
+	return ""
+
 # Godot 4.7's Android library already registers an AndroidX FileProvider.
 # Its authority is <applicationId>.fileprovider and filesRoot covers filesDir.
 # Use the engine's provider directly: no custom manifest, Kotlin or Gradle build.
@@ -33,7 +56,8 @@ static func share_wav(path: String) -> bool:
 		return false
 	if path.simplify_path() != path or path.trim_prefix("user://exports/").contains("/"):
 		return false
-	if not FileAccess.file_exists(path):
+	path = archive_wav(path)
+	if path.is_empty():
 		return false
 	var runtime = Engine.get_singleton("AndroidRuntime")
 	if runtime == null:

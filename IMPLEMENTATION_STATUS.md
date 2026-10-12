@@ -25,11 +25,19 @@ paused record. Desktop close checkpoints and stops audio. The Android export
 explicitly declares VIBRATE and version 0.2.0/code 2. Linux engine tests use isolated
 user-data, timeouts, and fail on runtime errors or leaked-object diagnostics.
 
+**E — Export and receiving-app integrity:** Shared WAVs use verified immutable
+content snapshots; rendering failures preserve the prior export. A separate,
+permission-free Android test app must read exact bytes, prepare the WAV with
+MediaPlayer, and be denied writes and reads of an unshared sibling. The chooser
+is exercised after cancellation and across repeated exports. See
+`docs/WAV_RECEIVER_QA.md`; actual passing receipts are CI evidence, not inferred
+from source inspection.
+
 ## Locally exercised checks
 
-22 Python tests; 20 smoke assertions; 196 full-game, 29 checkpoint, 19 audio-focus,
+26 Python tests; 20 smoke assertions; 196 full-game, 29 checkpoint, 19 audio-focus,
 20 audio-worker, 56 storage/parser, 49 player-flow, 12 native-navigation, and
-10 deterministic audio-soak assertions. Re-run CI for the current revision;
+10 WAV-integrity and 10 deterministic audio-soak assertions. Re-run CI for the current revision;
 counts are implementation coverage, not claims of exhaustive correctness.
 The ten-minute audio soak renders simulated audio, not ten minutes of wall time.
 

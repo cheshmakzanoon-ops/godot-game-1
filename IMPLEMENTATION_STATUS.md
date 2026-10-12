@@ -35,7 +35,7 @@ from source inspection.
 
 ## Locally exercised checks
 
-26 Python tests; 20 smoke assertions; 196 full-game, 29 checkpoint, 19 audio-focus,
+29 Python tests; 20 smoke assertions; 196 full-game, 29 checkpoint, 19 audio-focus,
 20 audio-worker, 56 storage/parser, 49 player-flow, 12 native-navigation, and
 10 WAV-integrity and 10 deterministic audio-soak assertions. Re-run CI for the current revision;
 counts are implementation coverage, not claims of exhaustive correctness.

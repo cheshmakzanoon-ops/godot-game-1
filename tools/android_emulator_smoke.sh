@@ -32,6 +32,11 @@ adb shell settings put secure immersive_mode_confirmations confirmed || true
 # behind `logcat -t 5000`'s newest-lines-only truncation.
 adb logcat -G 12M || true
 adb logcat -c
+# Keep an app-only stream from before launch. Noisy emulator audio drivers can
+# displace PLAY from a later tail-limited diagnostic dump even when touch works.
+adb logcat -v threadtime godot:V AndroidRuntime:E '*:S' > "$evidence/app_events.log" 2>&1 &
+app_log_pid=$!
+trap 'kill "$app_log_pid" 2>/dev/null || true' EXIT
 
 # The first start must render the menu and accept the large one-thumb PLAY target.
 adb shell am start -W -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -p "$package"
@@ -57,14 +62,14 @@ adb shell input tap 240 720
 sleep 5
 adb shell pidof "$package" >/dev/null || fail 'the game crashed after a touch event'
 adb logcat -d -t 5000 > "$evidence/after_tap_logcat.txt"
-if ! grep -q 'NEEDLEBEAT_QA_PLAY_STARTED' "$evidence/after_tap_logcat.txt"; then
+if ! grep -q 'NEEDLEBEAT_QA_PLAY_STARTED' "$evidence/app_events.log"; then
   dismiss_launcher_anr
   adb shell input tap 240 720
   sleep 5
   adb logcat -d -t 5000 > "$evidence/after_tap_logcat.txt"
 fi
 touch_failure=0
-if ! grep -q 'NEEDLEBEAT_QA_PLAY_STARTED' "$evidence/after_tap_logcat.txt"; then
+if ! grep -q 'NEEDLEBEAT_QA_PLAY_STARTED' "$evidence/app_events.log"; then
   touch_failure=1
   echo 'TOUCH_INCONCLUSIVE: PLAY event absent or blocked by Android system dialog' | tee "$evidence/touch_warning.txt"
 fi
@@ -77,6 +82,10 @@ if ! python3 tools/check_android_screenshots.py "$evidence/menu.png" "$evidence/
   adb shell dumpsys window > "$evidence/window_state.txt" || true
   adb shell dumpsys SurfaceFlinger --list > "$evidence/surface_list.txt" || true
 fi
+
+kill "$app_log_pid" 2>/dev/null || true
+wait "$app_log_pid" 2>/dev/null || true
+trap - EXIT
 
 # A separate launch exercises real Android FileProvider + chooser from GDScript.
 adb shell am force-stop "$package"

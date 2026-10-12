@@ -35,5 +35,13 @@ class AndroidEmulatorCITests(unittest.TestCase):
         self.assertIn('NEEDLEBEAT_QA_SESSION_RESTORED stage=0 placed=1', script)
         self.assertIn('adb shell am force-stop', script)
 
+    def test_touch_evidence_survives_noisy_system_log_tail(self):
+        script = (ROOT / 'tools/android_emulator_smoke.sh').read_text()
+        self.assertIn("adb logcat -v threadtime godot:V AndroidRuntime:E '*:S'", script)
+        self.assertIn("grep -q 'NEEDLEBEAT_QA_PLAY_STARTED' \"$evidence/app_events.log\"", script)
+        self.assertIn('trap - EXIT', script)
+        self.assertIn('if [ "$touch_failure" -ne 0 ] || [ "$visual_failure" -ne 0 ]', script)
+        self.assertIn('python3 tools/check_android_screenshots.py', script)
+
 if __name__ == '__main__':
     unittest.main()

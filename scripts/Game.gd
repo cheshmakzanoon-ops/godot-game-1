@@ -15,6 +15,8 @@ var store := NBProgressStore.new()
 var audio: NBAudioSystem
 var motion := NBDiscMotion.new()
 var font: Font
+var print_cache := NBPrintCache.new()
+var _last_ui_second := -1
 var screen := "MENU"
 var selected_genre := 0
 var genre := 0
@@ -67,12 +69,13 @@ func _ready() -> void:
 	audio.focus_interrupted.connect(_on_android_audio_interrupted)
 	selected_genre = 0
 	audio.set_music_volume(float(store.data["settings"].get("music", 0.8)))
+	audio.set_effects_volume(float(store.data["settings"].get("effects_volume", 1.0)))
 	import_field = LineEdit.new()
 	import_field.position = Vector2(40, 350)
 	import_field.size = Vector2(400, 48)
 	import_field.placeholder_text = "Paste an NBD1 or NBD2 song code"
 	import_field.visible = false
-	import_field.max_length = 8192
+	import_field.max_length = NBSongCodec.MAX_CODE_LENGTH
 	add_child(import_field)
 	get_viewport().size_changed.connect(_refresh_layout)
 	_refresh_layout()
@@ -99,7 +102,9 @@ func _refresh_layout() -> void:
 	queue_redraw()
 
 func _process(delta: float) -> void:
-	var safe_delta := minf(delta, 0.10)
+	var previous_screen := screen
+	var had_feedback := feedback_timer > 0.0
+	var safe_delta := maxf(delta, 0.0)
 	elapsed += safe_delta
 	feedback_timer = maxf(0.0, feedback_timer - safe_delta)
 	if screen in ["RECORD", "FLIGHT", "FAIL", "STAGE_CLEAR", "ENCORE"]:
@@ -111,13 +116,16 @@ func _process(delta: float) -> void:
 		if drop_clock >= 0.19:
 			_start_full_playback()
 	if screen == "DROP_SHOW" or screen == "PREVIEW":
-		drop_clock += safe_delta
-		if drop_clock >= 4.0 * 4.0 * 60.0 / float(bpm) + 0.1:
-			screen = "MENU" if screen == "PREVIEW" else "RESULTS"
+		drop_clock = audio.transport_seconds()
+		if drop_clock >= 4.0 * 4.0 * 60.0 / float(bpm):
+			screen = "RESULTS"
 			audio.stop()
-	queue_redraw()
+	var ui_second := int(Time.get_unix_time_from_system())
+	if screen in ["RECORD", "FLIGHT", "ENCORE", "DROP_PAUSE", "DROP_SHOW", "PREVIEW"] or previous_screen != screen or had_feedback or ui_second != _last_ui_second or (screen == "MENU" and bool(store.data["settings"].get("motion", true))):
+		queue_redraw()
+	_last_ui_second = ui_second
 
-func _input(event: InputEvent) -> void:
+func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE:
 		if screen == "PAUSED":
 			_resume_game()
@@ -129,10 +137,14 @@ func _input(event: InputEvent) -> void:
 		return
 	var point := Vector2.ZERO
 	if event is InputEventScreenTouch:
-		if not event.pressed:
+		if not event.pressed or event.index != 0:
 			return
 		point = event.position
+	elif event is InputEventScreenDrag and screen == "SETTINGS" and event.index == 0:
+		point = event.position
 	elif event is InputEventMouseButton:
+		if event.device == InputEvent.DEVICE_ID_EMULATION:
+			return # Touch already handled; native GUI still receives emulated clicks.
 		if not event.pressed or event.button_index != MOUSE_BUTTON_LEFT:
 			return
 		point = event.position
@@ -164,7 +176,8 @@ func _tap(p: Vector2) -> void:
 			elif p.y > 120 and p.y < 840:
 				_fire()
 		"FLIGHT":
-			pass
+			if p.y < 90 and p.x > 384:
+				_pause_game()
 		"PAUSED":
 			if _inside(p, Rect2(44, 473, 392, 64)):
 				_resume_game()
@@ -178,13 +191,15 @@ func _tap(p: Vector2) -> void:
 				_next_stage()
 			elif not is_daily and _inside(p, Rect2(40, 785, 400, 45)):
 				_begin_encore()
-		"DROP_SHOW":
+		"DROP_SHOW", "PREVIEW":
 			audio.stop()
 			screen = "RESULTS"
 		"DROP_PAUSE":
 			pass
 		"RESULTS":
-			if _inside(p, Rect2(40, 536, 400, 50)):
+			if _inside(p, Rect2(270, 170, 170, 64)):
+				_play_saved(last_song)
+			elif _inside(p, Rect2(40, 536, 400, 50)):
 				_save_track()
 			elif _inside(p, Rect2(40, 591, 400, 50)):
 				_copy_code()
@@ -206,9 +221,9 @@ func _tap(p: Vector2) -> void:
 				import_field.visible = true
 				error_text = ""
 				import_field.grab_focus()
-			elif p.y >= 195 and p.y < 695:
-				var index := library_page * 5 + int((p.y - 194) / 96)
-				if index < store.data["favorites"].size():
+			elif p.y >= 227 and p.y < 695:
+				var index := library_page * 5 + int((p.y - 227) / 96)
+				if fmod(p.y - 227, 96) < 84 and index < store.data["favorites"].size():
 					_play_saved(store.data["favorites"][index])
 		"IMPORT":
 			if _inside(p, Rect2(40, 439, 400, 66)):
@@ -224,15 +239,20 @@ func _tap(p: Vector2) -> void:
 		"SETTINGS":
 			if _inside(p, Rect2(40, 305, 400, 60)):
 				var value := float(store.data["settings"].get("music", 0.8))
-				value = 0.0 if value > 0.95 else value + 0.2
+				value = clampf((p.x - 64.0) / 352.0, 0.0, 1.0)
 				store.change_setting("music", value)
 				audio.set_music_volume(value)
 			elif _inside(p, Rect2(40, 375, 400, 60)):
-				_toggle_setting("effects")
+				var value := clampf((p.x - 64.0) / 352.0, 0.0, 1.0)
+				store.change_setting("effects_volume", value)
+				store.change_setting("effects", value > 0)
+				audio.set_effects_volume(value)
 			elif _inside(p, Rect2(40, 445, 400, 60)):
 				_toggle_setting("motion")
 			elif _inside(p, Rect2(40, 515, 400, 60)):
 				_toggle_setting("haptics")
+			elif _inside(p, Rect2(40, 585, 400, 60)):
+				_toggle_setting("flashes")
 			elif _inside(p, Rect2(40, 715, 400, 65)):
 				_open_menu()
 	queue_redraw()
@@ -258,7 +278,7 @@ func _checkpoint_session() -> void:
 	if state not in ["RECORD", "FLIGHT", "FAIL", "ENCORE", "STAGE_CLEAR"]:
 		return
 	if state == "FLIGHT":
-		state = "RECORD"
+		state = "ENCORE" if encore_remaining > 0 else "RECORD"
 	store.data["active_song"] = {
 		"v": 1, "screen": state, "daily": is_daily, "daily_date": daily_date,
 		"song_index": song_index, "seed": seed, "genre": genre,
@@ -274,8 +294,45 @@ func _checkpoint_session() -> void:
 	}
 	store.save()
 
+
+func _checkpoint_types_valid(value: Variant) -> bool:
+	if typeof(value) != TYPE_DICTIONARY:
+		return false
+	if typeof(value.get("screen")) != TYPE_STRING or typeof(value.get("daily")) != TYPE_BOOL or typeof(value.get("daily_date")) != TYPE_STRING:
+		return false
+	for key in ["v", "genre", "bpm", "music_version", "stage_index", "song_index", "placed", "active_lane", "stage_points", "stage_perfects", "total_score", "perfect_count", "miss_count", "retries", "combo", "encore_remaining"]:
+		if not NBSongCodec.integer_in(value.get(key), 0, 100000000):
+			return false
+	if not NBSongCodec.integer_in(value.get("seed"), 0, 9007199254740991):
+		return false
+	for key in ["stage_time", "effect_clock"]:
+		if typeof(value.get(key)) not in [TYPE_INT, TYPE_FLOAT] or not is_finite(float(value[key])) or value[key] < 0 or value[key] > 86400:
+			return false
+	if typeof(value.get("encore_snapshot")) != TYPE_DICTIONARY:
+		return false
+	var containers := [value]
+	if not value["encore_snapshot"].is_empty():
+		containers.append(value["encore_snapshot"])
+		for key in ["points", "perfects"]:
+			if not NBSongCodec.integer_in(value["encore_snapshot"].get(key), 0, 10000000):
+				return false
+	for container in containers:
+		if typeof(container.get("pins")) != TYPE_ARRAY or typeof(container.get("events")) != TYPE_ARRAY or container["pins"].size() > 50 or container["events"].size() > 42:
+			return false
+		for pin in container["pins"]:
+			if typeof(pin) != TYPE_DICTIONARY or typeof(pin.get("angle")) not in [TYPE_FLOAT, TYPE_INT]:
+				return false
+			if not is_finite(float(pin["angle"])) or not NBSongCodec.integer_in(pin.get("lane"), 0, 1) or typeof(pin.get("preload", false)) != TYPE_BOOL:
+				return false
+		for note in container["events"]:
+			if not NBSongCodec.event_valid(note):
+				return false
+	return true
+
 func _checkpoint_is_valid(value: Variant) -> bool:
-	if typeof(value) != TYPE_DICTIONARY or int(value.get("v", -1)) != 1:
+	if not _checkpoint_types_valid(value):
+		return false
+	if int(value.get("v", -1)) != 1:
 		return false
 	if str(value.get("screen", "")) not in ["RECORD", "FAIL", "ENCORE", "STAGE_CLEAR"]:
 		return false
@@ -402,6 +459,7 @@ func _pause_game() -> void:
 	screen = "PAUSED"
 	audio.pause_playback()
 	_checkpoint_session()
+	queue_redraw()
 
 func _resume_game() -> void:
 	if screen != "PAUSED":
@@ -439,6 +497,10 @@ func _open_menu() -> void:
 	feedback = ""
 
 func _start_song(daily: bool) -> void:
+	if store.read_only:
+		_feedback("NEWER SAVE / UPDATE APP FIRST", 3.0)
+		queue_redraw()
+		return
 	if OS.get_name() == "Android" and OS.has_feature("debug"):
 		print("NEEDLEBEAT_QA_PLAY_STARTED size=", size, " viewport=", get_viewport_rect().size,
 			" scale=", adapt_scale)
@@ -505,7 +567,13 @@ func _land_shot() -> void:
 		effect_clock = stage_clock
 		screen = "FAIL"
 		_checkpoint_session()
-		audio.stop()
+		var completed_layers: Array = []
+		for note in events:
+			if int(note["layer"]) < stage_index:
+				completed_layers.append(note)
+		audio.set_events(completed_layers)
+		if bool(store.data["settings"].get("effects", true)):
+			audio.effect("fail")
 		_vibrate(45)
 		return
 	pins.append({"angle": angle, "lane": flight_lane, "preload": false})
@@ -586,7 +654,8 @@ func _next_stage() -> void:
 func _complete_song() -> void:
 	last_song = {"genre": genre, "bpm": bpm, "seed": seed, "music_version": music_version,
 		"events": events.duplicate(true),
-		"score": total_score, "daily": is_daily, "date": daily_date}
+		"score": total_score, "perfects": perfect_count, "retries": retries,
+		"daily": is_daily, "date": daily_date}
 	last_song["code"] = NBSongCodec.encode(last_song)
 	store.data["active_song"] = {}
 	store.record_success(song_index, total_score, is_daily, daily_date,
@@ -604,6 +673,13 @@ func _start_full_playback() -> void:
 	audio.configure(genre, bpm, events, music_version, seed)
 
 func _play_saved(song: Dictionary) -> void:
+	if song.is_empty():
+		return
+	total_score = int(song.get("score", 0))
+	perfect_count = int(song.get("perfects", 0))
+	retries = int(song.get("retries", 0))
+	is_daily = bool(song.get("daily", false))
+	daily_date = str(song.get("date", ""))
 	genre = int(song.get("genre", 0))
 	bpm = int(song.get("bpm", NBStageDirector.BPMS[genre]))
 	music_version = int(song.get("music_version", 1))
@@ -624,12 +700,12 @@ func _play_saved(song: Dictionary) -> void:
 
 func _save_track() -> void:
 	store.save_favorite(last_song)
-	_feedback("SAVED TO LIBRARY", 1.6)
+	_feedback("SAVED TO LIBRARY" if store.last_error.is_empty() else store.last_error, 1.6)
 
 func _copy_code() -> void:
 	var code := str(last_song.get("code", ""))
 	DisplayServer.clipboard_set(code)
-	var shared := NBAndroidShare.share_code(code)
+	var shared := NBAndroidShare.share_code(code, "DAILY %s / SCORE %d / LOCAL, UNVERIFIED" % [daily_date, total_score] if is_daily else "")
 	_feedback("ANDROID SHARE CHOOSER OPENED" if shared else "CODE COPIED", 1.6)
 
 func _export_wav() -> void:
@@ -650,7 +726,8 @@ func _draw() -> void:
 		return
 	draw_set_transform(adapt_offset, 0.0, Vector2(adapt_scale, adapt_scale))
 	var palette: Array = NBStageDirector.PALETTES[clampi(genre if screen != "MENU" else selected_genre, 0, 4)]
-	_background(palette)
+	draw_texture_rect(print_cache.texture(palette, false), Rect2(0, 0, WIDTH, HEIGHT), false)
+	_text("N B / D  —  INDEPENDENT AUDIO PRESS", 26, 36, 10, Color(palette[1].r, palette[1].g, palette[1].b, .56))
 	match screen:
 		"MENU":
 			_draw_menu(palette)
@@ -697,24 +774,6 @@ func _button(rect: Rect2, title: String, palette: Array, kind: String = "main") 
 	_text(title, rect.position.x + 19, rect.position.y + rect.size.y * 0.63, 18 if rect.size.x > 250 else 14, text_color)
 	_text("↗", rect.end.x - 30, rect.position.y + rect.size.y * 0.63, 17, text_color)
 
-func _background(palette: Array) -> void:
-	var bg: Color = palette[0]
-	var paper: Color = palette[1]
-	draw_rect(Rect2(0, 0, WIDTH, HEIGHT), bg)
-	# An editorial screenprint grid rather than a generic neon arcade gradient.
-	for col in 9:
-		var x := 24.0 + col * 54.0
-		draw_line(Vector2(x, 0), Vector2(x - 35.0, HEIGHT), Color(paper.r, paper.g, paper.b, 0.033), 1.0)
-	for row in 17:
-		var y := 21.0 + row * 49.0
-		draw_line(Vector2(0, y), Vector2(WIDTH, y), Color(paper.r, paper.g, paper.b, 0.026), 1.0)
-	for speck in 140:
-		var px := float((speck * 137 + 41) % 479)
-		var py := float((speck * 311 + 71) % 853)
-		draw_circle(Vector2(px, py), 0.55, Color(paper.r, paper.g, paper.b, 0.09))
-	draw_rect(Rect2(16, 16, WIDTH - 32, HEIGHT - 32), Color(paper.r, paper.g, paper.b, 0.12), false, 1.0)
-	_text("N B / D  —  INDEPENDENT AUDIO PRESS", 26, 36, 10, Color(paper.r, paper.g, paper.b, .56))
-
 func _masthead(palette: Array, subtitle: String) -> void:
 	_text("NEEDLEBEAT", 27, 83, 40, palette[1])
 	_text("DROP", 30, 111, 23, palette[2])
@@ -725,25 +784,13 @@ func _record_art(palette: Array, phase: float, ring_pins: Array, special: String
 	var bright: Color = palette[1]
 	var base: Color = palette[0]
 	var accent: Color = palette[2]
-	draw_circle(CENTER + Vector2(2, 11), MAIN_RADIUS + 40.0, Color(0, 0, 0, .30))
-	draw_circle(CENTER, MAIN_RADIUS + 33.0, base.lightened(.21))
-	draw_circle(CENTER, MAIN_RADIUS + 29.0, bright.darkened(.62))
-	draw_circle(CENTER, MAIN_RADIUS + 24.0, base.darkened(.35))
-	draw_arc(CENTER, MAIN_RADIUS + 30.0, 0, TAU, 160, accent, 2.3, true)
-	for groove in 15:
-		var radius := 45.0 + float(groove) * 7.6
-		var groove_color := Color(bright.r, bright.g, bright.b, .035 if groove % 2 == 0 else .065)
-		draw_arc(CENTER, radius, 0, TAU, 144, groove_color, 1.0, true)
+	draw_texture(print_cache.texture(palette, true), CENTER - Vector2(200, 200))
 	for tick in 16:
 		var a := phase + float(tick) * TAU / 16.0
 		var direction := Vector2(cos(a), sin(a))
 		var from := CENTER + direction * (MAIN_RADIUS - 6)
 		var to := CENTER + direction * (MAIN_RADIUS + (4 if tick % 4 == 0 else 1))
 		draw_line(from, to, palette[4] if tick % 4 == 0 else bright.darkened(.46), 2.1 if tick % 4 == 0 else 1.0, true)
-	draw_circle(CENTER, 44, palette[3])
-	draw_circle(CENTER + Vector2(1, 2), 37, base.darkened(.15))
-	draw_circle(CENTER, 32, palette[1])
-	draw_arc(CENTER, 38, 0, TAU, 100, palette[4], 2.0, true)
 	_text("NB", CENTER.x - 22, CENTER.y + 6, 20, base)
 	_text("45 RPM", CENTER.x - 17, CENTER.y + 21, 8, base.lightened(.20))
 	draw_circle(CENTER, 3.1, palette[2])
@@ -756,7 +803,7 @@ func _record_art(palette: Array, phase: float, ring_pins: Array, special: String
 	for pin in ring_pins:
 		_draw_pin(float(pin["angle"]) + phase, int(pin.get("lane", 0)),
 			bool(pin.get("preload", false)), palette)
-	if ornament and bool(store.data["settings"].get("motion", true)):
+	if ornament and bool(store.data["settings"].get("motion", true)) and bool(store.data["settings"].get("flashes", true)):
 		var time := elapsed if screen == "MENU" else drop_clock
 		var pulse := 3.0 * (1.0 + sin(time * 2.0))
 		draw_arc(CENTER, MAIN_RADIUS + 37.0 + pulse, -PI * .32, PI * 1.40, 80,
@@ -775,7 +822,7 @@ func _draw_pin(world_angle: float, lane: int, is_preloaded: bool, palette: Array
 	draw_line(stem_start + side * 1.5, stem_end + side * 1.5, Color(0, 0, 0, .44), 8.5, true)
 	draw_line(stem_start, stem_end, shaft_color, 6, true)
 	draw_line(stem_start + side * 1.5, stem_end + side * 1.5, palette[0].lightened(.36), 1.5, true)
-	draw_circle(head, head_radius + 0.7, palette[0])
+	draw_circle(head, head_radius, palette[0])
 	draw_circle(head, head_radius - 1, head_color)
 	draw_circle(head - ray * 2.5, 2.8, palette[1])
 	draw_line(stem_end - side * 5.0, stem_end + side * 5.0, shaft_color, 2.2, true)
@@ -790,6 +837,9 @@ func _draw_shooter(palette: Array) -> void:
 		intensity = 1.0 if bool(proximity["hit"]) else .0
 	var aim_color: Color = Color("ee685a") if intensity > 0.0 else palette[2]
 	draw_arc(target, 21.0, PI * .12, PI * .88, 25, aim_color, 2.5, true)
+	if intensity > 0.0:
+		draw_line(target + Vector2(-5, 24), target + Vector2(5, 34), aim_color, 2)
+		draw_line(target + Vector2(5, 24), target + Vector2(-5, 34), aim_color, 2)
 	var head_y := LAUNCH_Y
 	if screen == "FLIGHT":
 		var progress := clampf((stage_clock - flight_start) / NBGeometry.FLIGHT, 0, 1)
@@ -797,7 +847,9 @@ func _draw_shooter(palette: Array) -> void:
 		head_y = lerpf(LAUNCH_Y, CENTER.y + flight_radius, progress)
 	var head := Vector2(CENTER.x, head_y)
 	draw_line(head + Vector2(0, 2), head + Vector2(0, 48), palette[1], 8, true)
-	draw_circle(head, 11.0, palette[2])
+	var head_radius := radius * sin(deg_to_rad(NBGeometry.HIT_DEG * 0.5))
+	draw_circle(head, head_radius, palette[0])
+	draw_circle(head, head_radius - 1.0, palette[2])
 	draw_circle(head, 3.1, palette[1])
 	if screen != "FLIGHT":
 		for i in 3:
@@ -808,7 +860,7 @@ func _draw_shooter(palette: Array) -> void:
 func _draw_menu(palette: Array) -> void:
 	_masthead(palette, "EVERY SHOT WRITES THE SONG")
 	_text("SET", 403, 89, 13, palette[4])
-	_text("01   ROTATE / HIT / COMPOSE", 29, 174, 12, palette[1].darkened(.25))
+	_text("DAILY RESETS IN " + NBStageDirector.daily_countdown() + " UTC", 29, 174, 12, palette[1].darkened(.25))
 	var menu_pins: Array = []
 	for i in 7:
 		menu_pins.append({"angle": float(i) * TAU / 7.0 + sin(float(i) * 4.0) * 0.10,
@@ -839,7 +891,7 @@ func _draw_game(palette: Array) -> void:
 	var phase := motion.phase_at(stage_clock)
 	_record_art(palette, phase, pins, str(stage["special"]), active_lane)
 	# Inner needle follows the musical transport; hazards follow physical phase.
-	var audio_phase := fposmod(audio.elapsed_seconds() * TAU / (240.0 / float(bpm)), TAU)
+	var audio_phase := fposmod(audio.transport_seconds() * TAU / (240.0 / float(bpm)), TAU)
 	var needle := Vector2(cos(audio_phase - PI * .5), sin(audio_phase - PI * .5))
 	draw_line(CENTER + needle * 50.0, CENTER + needle * 64.0, palette[4], 2.5, true)
 	if screen == "FLIGHT":
@@ -894,17 +946,19 @@ func _draw_drop(palette: Array) -> void:
 		_text("YOU MADE THIS.", 52, 634, 28, palette[1])
 		_text("%d BPM   /   04 BARS   /   %s" % [bpm, NBStageDirector.GENRES[genre]], 53, 659, 12, palette[4])
 		for i in 32:
-			var height := 6.0 + 33.0 * absf(sin(drop_clock * 7.0 + i * 0.64) * cos(drop_clock * 1.3 + i * .14))
+			var time := drop_clock if bool(store.data["settings"].get("motion", true)) else 0.0
+			var height := 6.0 + 33.0 * absf(sin(time * 7.0 + i * 0.64) * cos(time * 1.3 + i * .14))
 			draw_rect(Rect2(49 + i * 12.0, 741 - height, 6, height),
 				palette[2] if i % 4 == 0 else palette[3])
 		_text("TAP TO SKIP  /  KEEP THIS TRACK", 91, 805, 13, palette[1])
 
 func _draw_results(palette: Array) -> void:
 	_masthead(palette, "THE PRESSING IS COMPLETE")
-	_text("YOU MADE", 32, 187, 40, palette[1])
-	_text("A SONG.", 33, 242, 52, palette[2])
+	_text("YOUR", 32, 187, 34, palette[1])
+	_text("RECORD.", 33, 235, 40, palette[2])
+	_button(Rect2(270, 170, 170, 64), "REPLAY", palette, "secondary")
 	_panel(Rect2(30, 265, 420, 255), palette)
-	_text("FINAL SCORE", 52, 309, 15, palette[1].darkened(.25))
+	_text("DAILY " + daily_date if is_daily else "FINAL SCORE", 52, 309, 15, palette[1].darkened(.25))
 	_text("%06d" % total_score, 49, 376, 55, palette[2])
 	_rule(50, 398, 380, palette[1].darkened(.58))
 	_text("PERFECT NOTES", 49, 430, 11, palette[1].darkened(.25))
@@ -964,11 +1018,18 @@ func _draw_settings(palette: Array) -> void:
 	_text("SETTINGS", 38, 235, 45, palette[1])
 	var settings: Dictionary = store.data["settings"]
 	_button(Rect2(40, 305, 400, 60), "MUSIC  %d%%" % int(round(float(settings.get("music", .8)) * 100.0)), palette, "secondary")
-	_button(Rect2(40, 375, 400, 60), "SOUND FX   %s" % ("ON" if settings.get("effects", true) else "OFF"), palette, "secondary")
+	_button(Rect2(40, 375, 400, 60), "SOUND FX  %d%%" % roundi(float(settings.get("effects_volume", 1.0)) * 100), palette, "secondary")
+	for i in 2:
+		var level := float(settings.get("music" if i == 0 else "effects_volume", 0.8))
+		var y := 351.0 + 70.0 * i
+		draw_line(Vector2(64, y), Vector2(416, y), palette[1].darkened(.65), 3)
+		draw_line(Vector2(64, y), Vector2(64 + 352 * level, y), palette[2], 3)
+		draw_circle(Vector2(64 + 352 * level, y), 5, palette[1])
 	_button(Rect2(40, 445, 400, 60), "ANIMATIONS   %s" % ("ON" if settings.get("motion", true) else "REDUCED"), palette, "secondary")
 	_button(Rect2(40, 515, 400, 60), "HAPTICS   %s" % ("ON" if settings.get("haptics", true) else "OFF"), palette, "secondary")
-	_text("PORTRAIT • OFFLINE • ORIGINAL SOUND", 55, 643, 13, palette[4])
-	_text("NEEDLEBEAT / FIRST PRESSING — 1.0", 59, 670, 11, palette[1].darkened(.32))
+	_button(Rect2(40, 585, 400, 60), "GLOW   %s" % ("ON" if settings.get("flashes", true) else "REDUCED"), palette, "secondary")
+	_text("PORTRAIT • OFFLINE • ORIGINAL SOUND", 55, 674, 13, palette[4])
+	_text("NEEDLEBEAT / TEST BUILD 0.2.0", 59, 699, 11, palette[1].darkened(.32))
 	_button(Rect2(40, 715, 400, 65), "BACK TO STUDIO", palette)
 
 func _draw_pause_overlay(palette: Array) -> void:

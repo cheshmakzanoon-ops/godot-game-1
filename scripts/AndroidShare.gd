@@ -3,7 +3,7 @@ extends RefCounted
 
 # Android 4.7 JavaClassWrapper bridge: share song text with the system chooser.
 # Shares text through ACTION_SEND; see share_wav for content-URI audio sharing.
-static func share_code(code: String) -> bool:
+static func share_code(code: String, context: String = "") -> bool:
 	if OS.get_name() != "Android":
 		return false
 	var runtime = Engine.get_singleton("AndroidRuntime")
@@ -15,7 +15,7 @@ static func share_code(code: String) -> bool:
 	var Intent = JavaClassWrapper.wrap("android.content.Intent")
 	var intent = Intent.Intent()
 	intent.setAction(Intent.ACTION_SEND)
-	intent.putExtra(Intent.EXTRA_TEXT, "NEEDLEBEAT: DROP\n" + code)
+	intent.putExtra(Intent.EXTRA_TEXT, "NEEDLEBEAT: DROP\n" + (context + "\n" if not context.is_empty() else "") + code)
 	intent.setType("text/plain")
 	var chooser = Intent.createChooser(intent, "Share NEEDLEBEAT song")
 	var share_task = func() -> void:
@@ -30,6 +30,8 @@ static func share_wav(path: String) -> bool:
 	if OS.get_name() != "Android" or not path.begins_with("user://exports/"):
 		return false
 	if not path.get_file().begins_with("needlebeat_") or path.get_extension().to_lower() != "wav":
+		return false
+	if path.simplify_path() != path or path.trim_prefix("user://exports/").contains("/"):
 		return false
 	if not FileAccess.file_exists(path):
 		return false

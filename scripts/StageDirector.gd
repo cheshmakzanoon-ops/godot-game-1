@@ -54,3 +54,8 @@ static func daily_seed(date: String) -> int:
 
 static func daily_genre(seed: int) -> int:
 	return posmod(seed, 5)
+
+static func daily_countdown(unix_seconds: float = -1.0) -> String:
+	var now := Time.get_unix_time_from_system() if unix_seconds < 0 else unix_seconds
+	var left := 86400 - int(floorf(fposmod(now, 86400.0)))
+	return "%02d:%02d:%02d" % [int(left / 3600), int(left / 60) % 60, left % 60]

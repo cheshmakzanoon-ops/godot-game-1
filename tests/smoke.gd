@@ -68,5 +68,8 @@ func run_checks() -> void:
 			"zero-sized root falls back to positive viewport bounds")
 		game.call("_open_menu")
 		game.queue_free()
+	system.free()
+	wav.close()
 	print("SMOKE TESTS: %d failure(s)" % failures)
+	await create_timer(0.5).timeout # Let native audio release retired playback references.
 	quit(0 if failures == 0 else 1)

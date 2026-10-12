@@ -21,7 +21,7 @@ The probe exercises a spinning record while the real Android audio generator run
 
 - 95th-percentile main-loop frame interval (maximum 250 ms on CI's software emulator; **not** the product's 60 FPS goal).
 - Audio mixer frame progression within 85–115% of real elapsed time.
-- Up to 100 generator-buffer underrun **events**, as returned by `AudioStreamGeneratorPlayback.get_skips()`. This counter counts underrun occurrences, not samples; the threshold is deliberately conservative for emulation.
+- Up to 5 generator-buffer underrun **events**, as returned by `AudioStreamGeneratorPlayback.get_skips()`. This counter counts underrun occurrences, not samples; the gate was tightened from 100 to 5 after moving PCM production off the render thread. A run must also confirm that the worker is active.
 - Godot engine allocator growth below 24 MiB during the sampling window, with at least 150 observed render frames.
 
 The emulator script requires both `NEEDLEBEAT_QA_PERF_METRICS` and `NEEDLEBEAT_QA_PERF_PASS` in Android logcat; any `NEEDLEBEAT_QA_PERF_FAIL` or missing completion is a CI failure. The `NEEDLEBEAT_DROP_Emulator_Evidence` artifact includes `perf_soak_logcat.txt`, `soak_meminfo.txt`, `soak_gfxinfo.txt`, and `soak.png` for review. No real user data should be modified by the debug probe.
@@ -29,3 +29,22 @@ The emulator script requires both `NEEDLEBEAT_QA_PERF_METRICS` and `NEEDLEBEAT_Q
 ## Physical Android release gates still open
 
 For a midrange Android phone, test at 30/60/120 Hz and collect average, P95 and P99 frame times, driver underrun counts, peak RAM, CPU time, thermals, and battery usage over at least 15 minutes of active gameplay and uninterrupted composition. Repeat on speaker, wired headphones, and Bluetooth; include a real incoming call, device lock/unlock, app backgrounding, and process kill. Target stable 60 FPS with no audible generator skips and acceptable latency. The emulator cannot validate acoustical sync, actual phone GPU stability, heat, or radio/device interruptions.
+
+## Recovered-phase comparison
+
+A same-duration run on source commit `7436151715e26cc6ca5d65457c9666b636036f03`
+completed on GitHub Actions run `38197163164`. Its artifact
+`NEEDLEBEAT_DROP_Emulator_Evidence/perf_soak_logcat.txt` reported:
+
+| Metric | Prior performance baseline | Threaded PCM + cached artwork |
+|---|---:|---:|
+| P95 main-loop interval | 175.69 ms | 110.29 ms |
+| Frames sampled | 319 | 428 |
+| Audio clock ratio | 0.9921 | 1.0000 |
+| Generator underrun events | 80 | 0 |
+| Godot allocator delta | 9,260 bytes | 10,580 bytes |
+
+This is a single software-emulator comparison, not a controlled phone benchmark.
+The renderer still does not meet the physical-device 60 FPS acceptance target.
+The mutex-protected single producer uses a 4 ms polling interval; immediate
+click/failure effects are native AudioStreamPlayers rather than delayed song PCM.

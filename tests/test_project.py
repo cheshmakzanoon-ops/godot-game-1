@@ -83,7 +83,9 @@ class NeedlbeatTests(unittest.TestCase):
         self.assertAlmostEqual(phase(4.8, 2.4, 'PULSE'), TAU * 2)
 
     def test_line_budget(self):
-        sources = [*ROOT.glob('scripts/*.gd'), *ROOT.glob('tools/*.py'), *ROOT.glob('tests/*.gd'), *ROOT.glob('tests/*.py')]
+        suffixes = {'.gd', '.py', '.sh', '.gdshader', '.kt', '.java'}
+        sources = [p for directory in ('scripts', 'tools', 'tests', 'addons', 'android_native')
+                   for p in (ROOT / directory).rglob('*') if p.is_file() and p.suffix in suffixes]
         lines = sum(len(p.read_text().splitlines()) for p in sources)
         self.assertLess(lines, 5000, f'{lines} first-party source lines')
         print('First-party script / synthesis / test lines:', lines)

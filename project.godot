@@ -1,10 +1,11 @@
-; NEEDLEBEAT: DROP — Godot 4.6/4.7, portrait Android, Compatibility renderer.
+; NEEDLEBEAT: DROP — Godot 4.7.2, portrait Android, Compatibility renderer.
 config_version=5
 
 [application]
 config/name="NEEDLEBEAT: DROP"
+config/version="0.2.0"
 run/main_scene="res://scenes/Main.tscn"
-config/features=PackedStringArray("4.6", "GL Compatibility")
+config/features=PackedStringArray("4.7", "GL Compatibility")
 config/description="Every shot risks the run. Every shot writes the song."
 config/icon="res://art/icon.png"
 

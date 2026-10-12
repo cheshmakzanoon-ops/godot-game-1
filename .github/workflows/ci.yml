@@ -37,22 +37,32 @@ jobs:
       - name: Import resources and check GDScript syntax
         run: timeout 120 godot --headless --editor --path . --import --quit
       - name: Engine-integrated gameplay and WAV smoke tests
-        run: timeout 90 godot --headless --path . --script res://tests/smoke.gd
+        run: bash tools/run_godot_test.sh res://tests/smoke.gd
       - name: Deterministic four-record / music regression tests
-        run: timeout 120 godot --headless --path . --script res://tests/full_flow.gd
+        run: bash tools/run_godot_test.sh res://tests/full_flow.gd
       - name: Android process-death checkpoints and sample-accurate audio
-        run: timeout 120 godot --headless --path . --script res://tests/checkpoint_flow.gd
+        run: bash tools/run_godot_test.sh res://tests/checkpoint_flow.gd
       - name: Android audio-focus interruption and lifecycle regressions
-        run: timeout 90 godot --headless --path . --script res://tests/audio_focus_flow.gd
+        run: bash tools/run_godot_test.sh res://tests/audio_focus_flow.gd
       - name: PCM worker survives render stalls and thread churn
-        run: timeout 90 godot --headless --path . --script res://tests/audio_worker.gd
+        run: bash tools/run_godot_test.sh res://tests/audio_worker.gd
       - name: Atomic saves and hostile composition parser inputs
-        run: timeout 90 godot --headless --path . --script res://tests/storage_safety.gd
+        run: bash tools/run_godot_test.sh res://tests/storage_safety.gd
       - name: Replay, library hit regions, touch and settings
-        run: timeout 90 godot --headless --path . --script res://tests/player_flow.gd
+        run: bash tools/run_godot_test.sh res://tests/player_flow.gd
+      - name: Native Back and window-close recovery
+        run: bash tools/run_godot_test.sh res://tests/native_navigation.gd
       - name: Ten-minute deterministic audio/memory/CPU soak
         timeout-minutes: 3
-        run: timeout 150 godot --headless --path . --script res://tests/audio_soak.gd
+        run: bash tools/run_godot_test.sh res://tests/audio_soak.gd
+
+      - name: Upload engine regression logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: NEEDLEBEAT_DROP_Engine_Evidence
+          path: build/engine-evidence/
+          if-no-files-found: ignore
 
   android-debug:
     needs: game-test
@@ -107,6 +117,7 @@ jobs:
           head -12 build/apk-badging.txt
           "$ANDROID_HOME/build-tools/35.0.1/aapt" dump xmltree build/NEEDLEBEAT_DROP-debug.apk AndroidManifest.xml > build/apk-manifest.txt
           grep -q 'FileProvider' build/apk-manifest.txt
+          grep -q 'android.permission.VIBRATE' build/apk-manifest.txt
       - uses: actions/upload-artifact@v4
         with:
           name: NEEDLEBEAT_DROP_Android_ARM64_Debug
@@ -148,7 +159,7 @@ jobs:
           ram-size: 3072M
           disable-animations: true
           emulator-options: -no-snapshot -no-window -gpu swangle -noaudio -no-boot-anim -camera-back none
-          script: bash tools/android_emulator_smoke.sh
+          script: bash tools/android_emulator_smoke.sh && bash tools/android_native_back.sh
       - name: Upload emulator diagnostics
         if: always()
         uses: actions/upload-artifact@v4

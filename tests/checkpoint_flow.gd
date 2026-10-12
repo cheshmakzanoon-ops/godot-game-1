@@ -185,4 +185,5 @@ func run_checks() -> void:
 	for filename in [SAVE, BACKUP]:
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(filename))
 	print("CHECKPOINT FLOW: %d assertions, %d failures" % [checks, errors])
+	await create_timer(0.5).timeout # Let native audio release retired playback references.
 	quit(0 if errors == 0 else 1)
